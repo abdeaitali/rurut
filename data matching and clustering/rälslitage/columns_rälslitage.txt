@@ -1,0 +1,21 @@
+Column 'Befästningsmodell' contains the following non-numeric unique values:
+['P-Ec' 'Hey' 'P-Fc' '?' nan 'P-Ecp' 'R-und' '-' 'Hambo' 'p-Ecd' 'P-Ecd'
+ 'P-FE']
+
+Column 'Sträcka' contains the following non-numeric unique values:
+['Linje' 'Driftplats (nhsp)' 'Driftplats (ahsp)' nan]
+
+Column 'Hastighetsklass' contains the following non-numeric unique values:
+['2,0' '3,0' '1,0' '0,0' '4,0']
+
+Column 'Slipermodell' contains the following non-numeric unique values:
+['B2.5F' 'B' 'A 22' 'B2.5' 'T' 'H' '?' nan 'B35' 'BFE' 'A 26']
+
+Column 'Räl Stålsort Yttersträng' contains the following non-numeric unique values:
+['LHT' '?' nan '900A' 'HT' 'R350LHT' 'R320Cr' 'R260' 'R220' 'R350HT'
+ 'R400HT' 'R260Mn' '900B']
+
+
+Column 'Räl Stålsort Innersträng' contains the following non-numeric unique values:
+['LHT' '?' nan '900A' 'R350LHT' 'R320Cr' 'R260' 'R220' 'R400HT' 'R350HT'
+ 'HT' '900B' 'R260Mn']
