@@ -1,4 +1,4 @@
-import pandas as pd
+import pandas as pd  # type: ignore
 
 def read_input_data(file_path):
     """
@@ -16,12 +16,15 @@ def read_input_data(file_path):
         data = pd.read_csv(file_path, delimiter=";", encoding="utf-8")
 
         # Replace comma decimal separators with dots for numerical columns
-        for col in data.columns[3:]:  # Start from 'month 1'
+        for col in data.columns[4:]:  # Start from 'month 1'
             data[col] = data[col].str.replace(',', '.').astype(float)
+
+        # do the same for the 'Load' column
+        data['Load'] = data['Load'].str.replace(',', '.').astype(float)
 
         # Reshape the DataFrame so that months are in one column
         data_melted = data.melt(
-            id_vars=['Profile', 'Condition', 'Gauge'], 
+            id_vars=['Profile', 'Load','Condition', 'Gauge'], 
             value_vars=[f'month {i}' for i in range(1, 13)], 
             var_name='Month', 
             value_name='Value'
