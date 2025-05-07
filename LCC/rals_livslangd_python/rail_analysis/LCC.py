@@ -57,7 +57,7 @@ def get_annuity(H_table, NW_table, maint_strategy, RCF_residual_table, RCF_depth
     latest_tamping_since = 1
 
     rail_lifetime = track_technical_lifetime_years
-    rail_lifetime_remainder = max_months
+    #rail_lifetime_remainder = max_months
 
     historical_data = [] if track_results else None
 
@@ -65,7 +65,7 @@ def get_annuity(H_table, NW_table, maint_strategy, RCF_residual_table, RCF_depth
         y = m / 12
 
         gauge_curr += gauge_widening_per_year / 12
-        rail_lifetime_remainder -= 1
+        #rail_lifetime_remainder -= 1
 
         delta_H = PchipInterpolator(Xq, NW_table[NW_table['Month'] == latest_grinding_since]['Value'])(gauge_curr)
 
@@ -83,17 +83,17 @@ def get_annuity(H_table, NW_table, maint_strategy, RCF_residual_table, RCF_depth
             RCF_residual_curr = RCF_res_grinding + PchipInterpolator(Xq, RCF_depth_table[RCF_depth_table['Month'] == latest_grinding_since]['Value'])(gauge_curr)
             H_curr += delta_H
 
-        if latest_tamping_since == tamping_freq or rail_lifetime_remainder == 0:
+        if latest_tamping_since == tamping_freq: #or rail_lifetime_remainder == 0:
             accumulated_maintenance_costs += tamping_cost_per_meter * track_length_meter / (1 + discount_rate) ** y
             accumulated_cap_costs += poss_tamping * cap_poss_per_hour / (1 + discount_rate) ** y
             gauge_curr = gauge[0]
             latest_tamping_since = 0
-            if rail_lifetime_remainder == 0:
-                accumulated_renewal_costs = accumulated_renewal_costs + rail_renewal_cost / (1 + discount_rate) ** y
-                accumulated_maintenance_costs -= tamping_cost_per_meter * track_length_meter / (1 + discount_rate) ** y
-                rail_lifetime_remainder = max_months
+            # if rail_lifetime_remainder == 0:
+            #     accumulated_renewal_costs = accumulated_renewal_costs + rail_renewal_cost / (1 + discount_rate) ** y
+            #     accumulated_maintenance_costs -= tamping_cost_per_meter * track_length_meter / (1 + discount_rate) ** y
+            #     rail_lifetime_remainder = max_months
 
-        if RCF_residual_curr > RCF_max:
+        if RCF_residual_curr >= RCF_max:
             RCF_residual_curr = 0
             RCF_res_grinding = 0
 
@@ -105,14 +105,15 @@ def get_annuity(H_table, NW_table, maint_strategy, RCF_residual_table, RCF_depth
             H_curr += delta_H_1 + delta_H_2
             latest_grinding_since = 0
 
-        if gauge_curr >= 1450:
-            rail_lifetime_remainder = 0
+        # if gauge_curr >= 1450:
+        #     rail_lifetime_remainder = 0
 
         latest_grinding_since += 1
         latest_tamping_since += 1
 
         if H_curr > H_max:
             rail_lifetime = y
+            accumulated_renewal_costs = accumulated_renewal_costs + rail_renewal_cost / (1 + discount_rate) ** y
             break
 
         if track_results:
@@ -207,8 +208,11 @@ def plot_historical_data(historical_data):
 
     historical_df = pd.DataFrame(historical_data)
 
+    # figure size
+    fig_size=(7, 4)
+
     # Plot H_curr
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=fig_size)
     sns.lineplot(data=historical_df, x='Month', y='H_curr', marker='o')
     plt.title('Historical H_curr Values')
     plt.xlabel('Month')
@@ -217,7 +221,7 @@ def plot_historical_data(historical_data):
     plt.show()
 
     # Plot RCF_residual_curr
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=fig_size)
     sns.lineplot(data=historical_df, x='Month', y='RCF_residual_curr', marker='o')
     plt.title('Historical RCF_residual_curr Values')
     plt.xlabel('Month')
@@ -226,10 +230,17 @@ def plot_historical_data(historical_data):
     plt.show()
 
     # Plot Gauge_curr
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=fig_size)
     sns.lineplot(data=historical_df, x='Month', y='Gauge_curr', marker='o')
     plt.title('Historical Gauge_curr Values')
     plt.xlabel('Month')
     plt.ylabel('Gauge_curr')
     plt.grid()
     plt.show()
+
+    # print the lifetime in months, the last month before H_curr > H_max
+    lifetime_months = historical_df['Month'].iloc[-1]
+    print(f"Track lifetime in months: {lifetime_months}")
+    # print the lifetime in years
+    lifetime_years = lifetime_months / 12
+    print(f"Track lifetime in years: {lifetime_years:.2f}")
