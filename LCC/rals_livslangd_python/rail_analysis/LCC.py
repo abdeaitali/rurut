@@ -3,6 +3,8 @@
 import numpy as np # type: ignore
 from scipy.interpolate import PchipInterpolator # type: ignore
 
+from rail_analysis.LCA import get_LCA_renewal
+
 def get_annuity(H_table, NW_table, maint_strategy, RCF_residual_table, RCF_depth_table, track_results=False, gauge_widening_per_year=1):
     """
     Calculate the annuity (LCC per year) and track lifetime.
@@ -29,7 +31,7 @@ def get_annuity(H_table, NW_table, maint_strategy, RCF_residual_table, RCF_depth
     tamping_cost_per_meter = 40  # SEK/m
     grinding_cost_per_meter = 50  # SEK/m
 
-    track_renewal_costs = 6500 * track_length_meter
+    track_renewal_costs = 6500 * track_length_meter + get_LCA_renewal(track_length_meter, 'Track')
     rail_renewal_cost = 1500 * track_length_meter
 
     poss_grinding = 2  # hours
@@ -113,7 +115,8 @@ def get_annuity(H_table, NW_table, maint_strategy, RCF_residual_table, RCF_depth
 
         if H_curr > H_max:
             rail_lifetime = y
-            accumulated_renewal_costs = accumulated_renewal_costs + rail_renewal_cost / (1 + discount_rate) ** y
+            accumulated_renewal_costs = accumulated_renewal_costs + (rail_renewal_cost+ get_LCA_renewal(track_length_meter, 'Rail')) / (1 + discount_rate) ** y
+            # accumulated_renewal_costs = accumulated_renewal_costs + (rail_renewal_cost) / (1 + discount_rate) ** y
             break
 
         if track_results:

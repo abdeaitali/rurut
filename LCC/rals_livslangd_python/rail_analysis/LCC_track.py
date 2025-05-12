@@ -1,0 +1,236 @@
+import numpy as np  # type: ignore
+from scipy.interpolate import PchipInterpolator  # type: ignore
+from rail_analysis.rail_measures import (
+    get_h_index,
+    get_wear_data,
+    get_rcf_residual,
+    get_rcf_depth,
+)
+
+
+
+# --- PARAMETERS ---
+
+SELECTED_PROFILE = 'MB5'  
+SELECTED_LOAD = 32.5
+SELECTED_GAUGE_WIDENING = 1  
+
+DR = 0.04
+TRACK_LEN = 1000
+TECH_LIFE_Y = 15
+MAX_MONTHS = TECH_LIFE_Y * 12
+
+C_POSS = 50293
+C_GRIND = 50
+C_TAMP  = 40
+T_GRIND_HR = 2
+T_TAMP_HR  = 5
+
+H_MAX = 14
+RCF_MAX = 0.5
+
+TRACK_RENEW = 6500 * TRACK_LEN
+RAIL_RENEW  = 1500 * TRACK_LEN
+
+
+def get_annuity_track(
+    data_df,
+    grinding_freq_low,     # grinding interval (months) for low rail 
+    grinding_freq_high,    # grinding interval (months) for high rail 
+    gauge_freq,            # tamping interval (months)
+    profile_low_rail=SELECTED_PROFILE,
+    profile_high_rail=SELECTED_PROFILE,
+    track_results=False,
+    gauge_widening_per_year=SELECTED_GAUGE_WIDENING
+):
+    """
+    Calculate the annuity (LCC per year) and track lifetime for both rails.
+
+    Returns:
+      (annuity, lifetime, [optional] history)
+    """
+
+    # --- LOAD TABLES ---
+    Ht_H = get_h_index(data_df, profile=profile_high_rail, load=SELECTED_LOAD)
+    NW_H = get_wear_data(data_df, profile=profile_high_rail, load=SELECTED_LOAD)
+    RCF_RES_H = get_rcf_residual(data_df, profile=profile_high_rail, load=SELECTED_LOAD)
+    RCF_DEP_H = get_rcf_depth(data_df, profile=profile_high_rail, load=SELECTED_LOAD)
+
+    Ht_L = get_h_index(data_df, profile=profile_low_rail)
+    NW_L = get_wear_data(data_df, profile=profile_low_rail)
+    RCF_RES_L = get_rcf_residual(data_df, profile=profile_low_rail)
+    RCF_DEP_L = get_rcf_depth(data_df, profile=profile_low_rail)
+
+    gauge_levels = [1440, 1445, 1450, 1455]
+
+    # --- STATE & ACCUMULATORS ---
+    PV_maint = 0.0
+    PV_renew = TRACK_RENEW # TODO: add LCA
+    PV_cap   = 0.0
+
+    H_H = H_L = 0.0
+    R_H = R_L = 0.0
+    gauge = gauge_levels[0]
+
+    since_grind_H = since_grind_L = 1
+    since_tamp        = 1
+
+    history = [] if track_results else None
+    lifetime = TECH_LIFE_Y
+
+    # --- SIMULATION LOOP ---
+    for m in range(1, MAX_MONTHS + 1):
+        t = m / 12
+        gauge += gauge_widening_per_year / 12
+
+        # --- Grinding for each rail ---
+        for rail in ('H','L'):
+            freq = grinding_freq_high if rail=='H' else grinding_freq_low
+            since = since_grind_H if rail=='H' else since_grind_L
+            H_curr = H_H if rail=='H' else H_L
+            R_curr = R_H if rail=='H' else R_L
+            Ht = Ht_H if rail=='H' else Ht_L
+            NW = NW_H if rail=='H' else NW_L
+            RRes = RCF_RES_H if rail=='H' else RCF_RES_L
+            RDep = RCF_DEP_H if rail=='H' else RCF_DEP_L
+
+            if since == freq:
+                # apply grinding cost
+                PV_maint += (C_GRIND*TRACK_LEN)/(1+DR)**t
+                PV_cap   += (T_GRIND_HR*C_POSS)/(1+DR)**t
+
+                # update H-index
+                ΔH_g = PchipInterpolator(gauge_levels, Ht[Ht['Month']==freq]['Value'])(gauge)
+                ΔN   = PchipInterpolator(gauge_levels, NW[NW['Month']==since]['Value'])(gauge)
+                H_curr += ΔH_g - ΔN
+
+                # update RCF residual
+                rcf_r = PchipInterpolator(gauge_levels, RRes[RRes['Month']==freq]['Value'])(gauge)
+                if rcf_r>0:
+                    R_curr += rcf_r
+
+                since = 0
+            else:
+                # natural wear + new RCF
+                # if NW[NW['Month']==since] is empty, use the last value
+                if NW[NW['Month']==since].empty:
+                    tt = NW[NW['Month']==since-1].iloc[-1]
+                ΔN = PchipInterpolator(gauge_levels, NW[NW['Month']==since]['Value'])(gauge)
+                ΔR = PchipInterpolator(gauge_levels, RDep[RDep['Month']==since]['Value'])(gauge)
+                H_curr += ΔN
+                R_curr += ΔR
+
+            # save back
+            if rail=='H':
+                since_grind_H = since+1
+                H_H, R_H      = H_curr, R_curr
+            else:
+                since_grind_L = since+1
+                H_L, R_L      = H_curr, R_curr
+
+        # --- Gauge correction (tamping) ---
+        if since_tamp == gauge_freq:
+            PV_maint += (C_TAMP*TRACK_LEN)/(1+DR)**t
+            PV_cap   += (T_TAMP_HR*C_POSS)/(1+DR)**t
+            gauge     = gauge_levels[0]
+            since_tamp= 0
+        since_tamp += 1
+
+        # --- Double grind if RCF excess ---
+        for rail, since_attr in (('H', 'since_grind_H'), ('L','since_grind_L')):
+            R_curr = R_H if rail=='H' else R_L
+            H_curr = H_H if rail=='H' else H_L
+            since   = locals()[since_attr]
+
+            if R_curr >= RCF_MAX:
+                # double grind
+                PV_maint += (5/3*C_GRIND*TRACK_LEN)/(1+DR)**t
+                PV_cap   += (5/3*T_GRIND_HR*C_POSS)/(1+DR)**t
+
+                ΔH1 = PchipInterpolator(gauge_levels, Ht_H[Ht_H['Month']==since+1]['Value'])(gauge)
+                ΔH2 = PchipInterpolator(gauge_levels, Ht_H[Ht_H['Month']==1]['Value'])(gauge)
+                H_curr += ΔH1 + ΔH2
+                R_curr  = 0
+                since   = 1
+
+            # save back
+            if rail=='H':
+                H_H, R_H = H_curr, R_curr
+                since_grind_H = since
+            else:
+                H_L, R_L = H_curr, R_curr
+                since_grind_L = since
+
+        # --- Rail renewal if worn out ---
+        for H_curr, R_curr, name in ((H_H,R_H,'H'),(H_L,R_L,'L')):
+            if H_curr > H_MAX:
+                PV_renew += RAIL_RENEW/(1+DR)**t # TODO: add LCA
+                if name=='H': H_H, R_H = 0,0
+                else:         H_L, R_L = 0,0
+
+        # --- Check technical track renewal ---
+        if m == MAX_MONTHS:
+            lifetime = t
+            break
+
+        if track_results:
+            history.append({
+                'Month':m, 'H_H':H_H,'RCF_H':R_H,
+                'H_L':H_L,'RCF_L':R_L,'Gauge':gauge
+            })
+
+    # --- Compute annuity ---
+    total_PV = PV_maint + PV_cap + PV_renew
+    annuity = total_PV / TRACK_LEN / lifetime
+
+    return (annuity, lifetime, history) if track_results else (annuity, lifetime)
+
+
+import pandas as pd  # type: ignore
+import seaborn as sns  # type: ignore
+import matplotlib.pyplot as plt  # type: ignore
+
+def plot_historical_data(historical_data):
+    """
+    Plots the historical data for H_index and RCF_residual for both high and low rails, and Gauge over time.
+
+    Parameters:
+    - historical_data: List of dictionaries containing historical data with keys 'Month', 'H_H', 'RCF_H', 'H_L', 'RCF_L', and 'Gauge'.
+    """
+
+    historical_df = pd.DataFrame(historical_data)
+
+    # figure size
+    fig_size = (10, 6)
+
+    # Plot H_index for high and low rails
+    plt.figure(figsize=fig_size)
+    sns.lineplot(data=historical_df, x='Month', y='H_H', label='H_index High Rail', marker='o')
+    sns.lineplot(data=historical_df, x='Month', y='H_L', label='H_index Low Rail', marker='o')
+    plt.title('Historical H_index Values (High and Low Rails)')
+    plt.xlabel('Month')
+    plt.ylabel('H_index')
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+    # Plot RCF_residual for high and low rails
+    plt.figure(figsize=fig_size)
+    sns.lineplot(data=historical_df, x='Month', y='RCF_H', label='RCF High Rail', marker='o')
+    sns.lineplot(data=historical_df, x='Month', y='RCF_L', label='RCF Low Rail', marker='o')
+    plt.title('Historical RCF Values (High and Low Rails)')
+    plt.xlabel('Month')
+    plt.ylabel('RCF')
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+    # Plot Gauge
+    plt.figure(figsize=fig_size)
+    sns.lineplot(data=historical_df, x='Month', y='Gauge', label='Gauge', marker='o')
+    plt.title('Historical Gauge Values')
+    plt.xlabel('Month')
+    plt.ylabel('Gauge')
+    plt.grid()
+    plt.show()
+
