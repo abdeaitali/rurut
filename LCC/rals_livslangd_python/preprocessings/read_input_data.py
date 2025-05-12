@@ -16,7 +16,7 @@ def read_input_data(file_path):
         data = pd.read_csv(file_path, delimiter=";", encoding="utf-8")
 
         # Replace comma decimal separators with dots for numerical columns
-        for col in data.columns[4:]:  # Start from 'month 1'
+        for col in data.columns[-12:]:  # Start from 'month 1'
             data[col] = data[col].str.replace(',', '.').astype(float)
 
         # do the same for the 'Load' column
