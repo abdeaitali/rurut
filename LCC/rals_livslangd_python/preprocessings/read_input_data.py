@@ -1,5 +1,4 @@
 import pandas as pd  # type: ignore
-
 def read_input_data(file_path):
     """
     Reads input data from a CSV file with the specified structure
@@ -19,14 +18,25 @@ def read_input_data(file_path):
         for col in data.columns[-12:]:  # Start from 'month 1'
             data[col] = data[col].str.replace(',', '.').astype(float)
 
-        # do the same for the 'Load' column
-        data['Load'] = data['Load'].str.replace(',', '.').astype(float)
+        # Check if the 'Load' column exists
+        if 'Load' in data.columns:
+            # Do the same for the 'Load' column
+            data['Load'] = data['Load'].str.replace(',', '.').astype(float)
+        else:
+            # If 'Load' column does not exist, create it with a default value
+            data['Load'] = 32.5  # Default value for heavy axle load
 
         # Reshape the DataFrame so that months are in one column
+        id_vars = ['Profile', 'Load', 'Condition', 'Gauge']
+        if 'Radius' in data.columns:
+            id_vars.append('Radius')
+        if 'Rail' in data.columns:
+            id_vars.append('Rail')
+
         data_melted = data.melt(
-            id_vars=['Profile', 'Load','Condition', 'Gauge'], 
-            value_vars=[f'month {i}' for i in range(1, 13)], 
-            var_name='Month', 
+            id_vars=id_vars,
+            value_vars=[f'month {i}' for i in range(1, 13)],
+            var_name='Month',
             value_name='Value'
         )
 

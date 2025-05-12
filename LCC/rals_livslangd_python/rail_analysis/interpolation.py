@@ -4,49 +4,94 @@ import pandas as pd
 import numpy as np
 from scipy.interpolate import PchipInterpolator  # Import PchipInterpolator
 
-def interpolate_rail_data(df, grinding_freq_max, measure_type, rail_profile=None):
+
+def interpolate_rail_data(df, grinding_freq_max=12, condition='all', rail_profile='all', radius='all', rail='all', load='all'):
     """
-    Interpolates rail data (H-index, wear, RCF) for a given measure type,
+    Interpolates rail data (H-index, wear, RCF) for a given condition,
     handling missing gauge values and ensuring non-negative output, using PCHIP.
 
     Args:
         df (pd.DataFrame): The input DataFrame containing rail data with columns
-                           'Profile', 'Condition', 'Gauge', 'Month', and month values.
+                           'Profile', 'Condition', 'Gauge', 'Month', and values.
         grinding_freq_max (int): The maximum frequency (in months) for interpolation.
-        measure_type (str): The type of measurement to interpolate
-                            ('H-index', 'Wear', 'RCF-residual', 'RCF-depth').
+        condition (str): The type of measurement to interpolate
+                            ('H-index', 'Wear', 'RCF-residual', 'RCF-depth', or 'all').
+        rail_profile (str, optional): The rail profile to filter by. Defaults to 'all'.
+        radius (str, optional): The radius to filter by. Defaults to 'all'.
+        rail (str, optional): The rail type to filter by. Defaults to 'all'.
+        load (number, optional): The load to filter by. Defaults to 'all'.
 
     Returns:
         pd.DataFrame: A DataFrame with interpolated values, indexed by 'Gauge'.
-                        Returns an empty DataFrame if no matching data is found.
+                      Returns an empty DataFrame if no matching data is found.
     """
-    # if no rail_profile is provided, use MB5 as default
-    if rail_profile is None:
-        rail_profile = 'MB5'
 
-    # Ensure measure_type is lowercase and strip any extra spaces
-    measure_type = measure_type.strip().lower()
+    # Ensure condition is lowercase and strip any extra spaces
+    filtered_df = df
+    if rail_profile != 'all':
+        filtered_df = filtered_df[filtered_df['Profile'].str.strip().str.lower() == rail_profile.strip().lower()]
+    if radius != 'all':
+        filtered_df = filtered_df[filtered_df['Radius'].str.strip().str.lower() == radius.strip().lower()]
+    if rail != 'all':
+        filtered_df = filtered_df[filtered_df['Rail'].str.strip().str.lower() == rail.strip().lower()]
+    if load != 'all':
+        filtered_df = filtered_df[filtered_df['Load'] == load]
 
-    # Filter the DataFrame based on the specified measure_type
-    filtered_df = df[df['Condition'].str.strip().str.lower() == measure_type]
+    # Filter the DataFrame based on the specified condition
+    condition = condition.strip().lower()
+    if condition != 'all':
+        unique_conditions = [condition]
+        filtered_df = filtered_df[filtered_df['Condition'].str.strip().str.lower() == condition]
+    else:
+        unique_conditions = filtered_df['Condition'].str.strip().str.lower().unique()
 
-    # filter the DataFrame based on the specified rail_profile
-    filtered_df = filtered_df[filtered_df['Profile'].str.strip().str.lower() == rail_profile.strip().lower()]
+    # Interpolate data for each condition and append results
+    interp_results = pd.DataFrame()
+    for condition in unique_conditions:
+        for profile in filtered_df['Profile'].unique():
+            for radius in filtered_df['Radius'].unique():
+                for load in filtered_df['Load'].unique():
+                    for rail in filtered_df['Rail'].unique():
+                        specific_filtered_df = filtered_df[
+                            (filtered_df['Condition'].str.strip().str.lower() == condition) &
+                            (filtered_df['Profile'] == profile) &
+                            (filtered_df['Radius'] == radius) &
+                            (filtered_df['Load'] == load) &
+                            (filtered_df['Rail'] == rail)
+                        ]
+                        if not specific_filtered_df.empty:
+                            specific_results = interpolate_condition_data(specific_filtered_df, grinding_freq_max)
+                            specific_results['Rail'] = rail
+                            specific_results['Load'] = load
+                            specific_results['Radius'] = radius
+                            specific_results['Profile'] = profile
+                            specific_results['Condition'] = condition
+                            interp_results = pd.concat([interp_results, specific_results], ignore_index=True)
+
+    return interp_results
 
 
-    if filtered_df.empty:
-        print(f"Warning: No data found for measure type: {measure_type}")
-        return pd.DataFrame()  # Return an empty DataFrame
+def interpolate_condition_data(filtered_df, grinding_freq_max):
+    """
+    Interpolates rail data for a specific condition using PCHIP.
 
+    Args:
+        filtered_df (pd.DataFrame): The filtered DataFrame containing rail data.
+        condition (str): The condition to interpolate (e.g., 'H-index', 'Wear').
+        grinding_freq_max (int): The maximum frequency (in months) for interpolation.
+
+    Returns:
+        list: A list of dictionaries containing interpolated results.
+    """
     # Extract unique gauges and months for interpolation
     unique_gauges = filtered_df['Gauge'].unique()
 
     # Define the valid months for interpolation
     valid_months = np.array([0, 7, 8, 9, 10, 11, 12])
 
-    # Prepare DataFrame for results
-    interp_results = []
-
+    # Create a DataFrame to store the results
+    result_df = pd.DataFrame()
+    
     for gauge in unique_gauges:
         gauge_data = filtered_df[filtered_df['Gauge'] == gauge]
         if gauge_data.empty:
@@ -78,27 +123,23 @@ def interpolate_rail_data(df, grinding_freq_max, measure_type, rail_profile=None
 
         # Perform the interpolation using PCHIP
         interp_values = pchip_interp(np.arange(1, grinding_freq_max + 1))
-        #interp_values = np.maximum(interp_values, 0)  # Ensure non-negative values
 
         # Store the results in the same format as the original filtered_df
         for month, value in enumerate(interp_values, start=1):
-            interp_results.append({
-            'Profile': rail_profile,
-            'Condition': measure_type,
+            row = {
             'Gauge': gauge,
             'Month': month,
-            'Value': value
-            })
+            'Value': value,
+            }
+            # Append the row to the DataFrame
+            result_df = pd.concat([result_df, pd.DataFrame([row])], ignore_index=True)
 
-        if not interp_results:
-            return pd.DataFrame()
-
-    interp_df = pd.DataFrame(interp_results)
-    return interp_df
+    return result_df
 
 
-import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
 def plot_heatmap(data, condition, zlabel):
     """
@@ -110,7 +151,7 @@ def plot_heatmap(data, condition, zlabel):
         zlabel (str): The label for the Z-axis.
     """
     # Filter the data for the given condition
-    filtered_data = data[data['Condition'] == condition]
+    filtered_data = data[data['Condition'].str.strip().str.lower() == condition.strip().lower()]
 
     # Extract unique gauges and months
     gauges = filtered_data['Gauge'].unique()
@@ -132,4 +173,56 @@ def plot_heatmap(data, condition, zlabel):
     ax.set_zlabel(f'{zlabel} (mm)', fontsize=14, labelpad=10)
     ax.set_title(f'Interpolated {condition} look-up table', fontsize=16)
     fig.colorbar(surf, ax=ax, shrink=0.5, aspect=10)
+    plt.show()
+
+
+
+def plot_all_interpolated_tables(data, radius=1465):
+    """
+    Plots six figures in a single graph: two columns (Inner/Low Rail and High Rail)
+    and three rows (H-index, Wear, and RCF).
+
+    Args:
+        data (pd.DataFrame): The interpolated data to plot.
+        radius (int): The radius to filter the data.
+    """
+    # Define the conditions and rail types
+    conditions = ['h-index', 'wear', 'rcf-residual']
+    rail_types = ['inner', 'high']
+
+    # Create a figure with subplots
+    fig, axes = plt.subplots(3, 2, figsize=(10, 15), sharex=True, sharey=True)
+    fig.subplots_adjust(hspace=0.4, wspace=0.3)
+
+    for i, condition in enumerate(conditions):
+        for j, rail in enumerate(rail_types):
+            # Filter data for the specific condition, rail type, and radius
+            filtered_data = data[
+                (data['Condition'].str.strip().str.lower() == condition) &
+                (data['Rail'].str.strip().str.lower() == rail) &
+                (data['Radius'] == str(radius))
+            ]
+
+            if filtered_data.empty:
+                continue
+
+            # Extract unique gauges and months
+            gauges = filtered_data['Gauge'].unique()
+            months = filtered_data['Month'].unique()
+
+            # Create a meshgrid for the plot
+            X, Y = np.meshgrid(months, gauges)
+
+            # Pivot the data to create a 2D array for Z values
+            Z = filtered_data.pivot(index='Gauge', columns='Month', values='Value').values
+
+            # Plot the heatmap
+            ax = axes[i, j]
+            surf = ax.contourf(X, Y, Z, cmap='viridis', levels=20)
+            fig.colorbar(surf, ax=ax, orientation='vertical', shrink=0.8)
+
+            # Set labels and title
+            ax.set_title(f'{condition.capitalize()} - {rail.capitalize()}', fontsize=12)
+            ax.set_xlabel('Months (since last grinding)', fontsize=10)
+            ax.set_ylabel('Track gauge (mm)', fontsize=10)
     plt.show()

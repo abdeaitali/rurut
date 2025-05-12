@@ -1,19 +1,14 @@
 import numpy as np  # type: ignore
 from scipy.interpolate import PchipInterpolator  # type: ignore
-from rail_analysis.rail_measures import (
-    get_h_index,
-    get_wear_data,
-    get_rcf_residual,
-    get_rcf_depth,
-)
+from rail_analysis.rail_measures import get_table
 
 
 
 # --- PARAMETERS ---
 
-SELECTED_PROFILE = 'MB5'  
-SELECTED_LOAD = 32.5
+SELECTED_PROFILE = 'MB4'  
 SELECTED_GAUGE_WIDENING = 1  
+SELECTED_RADIUS = '1465'
 
 DR = 0.04
 TRACK_LEN = 1000
@@ -41,7 +36,8 @@ def get_annuity_track(
     profile_low_rail=SELECTED_PROFILE,
     profile_high_rail=SELECTED_PROFILE,
     track_results=False,
-    gauge_widening_per_year=SELECTED_GAUGE_WIDENING
+    gauge_widening_per_year=SELECTED_GAUGE_WIDENING, 
+    radius=SELECTED_RADIUS,  # radius of curvature (not used in this function)
 ):
     """
     Calculate the annuity (LCC per year) and track lifetime for both rails.
@@ -50,18 +46,21 @@ def get_annuity_track(
       (annuity, lifetime, [optional] history)
     """
 
+
+    data_df_radius = data_df[data_df['Radius'] == radius]
+
     # --- LOAD TABLES ---
-    Ht_H = get_h_index(data_df, profile=profile_high_rail, load=SELECTED_LOAD)
-    NW_H = get_wear_data(data_df, profile=profile_high_rail, load=SELECTED_LOAD)
-    RCF_RES_H = get_rcf_residual(data_df, profile=profile_high_rail, load=SELECTED_LOAD)
-    RCF_DEP_H = get_rcf_depth(data_df, profile=profile_high_rail, load=SELECTED_LOAD)
+    Ht_H = get_table(data_df_radius, 'h-index', profile=profile_high_rail, rail='High', radius=radius)
+    Ht_L = get_table(data_df_radius, 'h-index', profile=profile_low_rail, rail='Inner', radius=radius)
+    NW_H = get_table(data_df_radius, 'wear', profile=profile_high_rail, rail='High', radius=radius)
+    NW_L = get_table(data_df_radius, 'wear', profile=profile_low_rail, rail='Inner', radius=radius)
+    RCF_RES_H = get_table(data_df_radius, 'rcf-residual', profile=profile_high_rail, rail='High', radius=radius)
+    RCF_RES_L = get_table(data_df_radius, 'rcf-residual', profile=profile_low_rail, rail='Inner', radius=radius)
+    RCF_DEP_H = get_table(data_df_radius, 'rcf-depth', profile=profile_high_rail, rail='High', radius=radius)
+    RCF_DEP_L = get_table(data_df_radius, 'rcf-depth', profile=profile_low_rail, rail='Inner', radius=radius)
 
-    Ht_L = get_h_index(data_df, profile=profile_low_rail)
-    NW_L = get_wear_data(data_df, profile=profile_low_rail)
-    RCF_RES_L = get_rcf_residual(data_df, profile=profile_low_rail)
-    RCF_DEP_L = get_rcf_depth(data_df, profile=profile_low_rail)
-
-    gauge_levels = [1440, 1445, 1450, 1455]
+    gauge_levels = Ht_H['Gauge'].unique()
+    gauge_levels.sort()
 
     # --- STATE & ACCUMULATORS ---
     PV_maint = 0.0
