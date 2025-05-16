@@ -1,0 +1,342 @@
+# rail_analysis/LCC.py
+
+import numpy as np # type: ignore
+import matplotlib.pyplot as plt # type: ignore
+import pandas as pd # type: ignore
+import seaborn as sns # type: ignore
+from scipy.interpolate import PchipInterpolator # type: ignore
+
+from rail_analysis.rail_measures import get_table
+from rail_analysis.LCA import get_LCA_renewal
+
+# === GLOBAL PARAMETERS ===
+SELECTED_PROFILE = 'MB4'  
+SELECTED_GAUGE_WIDENING = 1  
+SELECTED_RADIUS = '1465'
+
+DISCOUNT_RATE = 0.04
+TRACK_LENGTH_M = 1000
+TECH_LIFE_YEARS = 15
+MAX_MONTHS = 12 * TECH_LIFE_YEARS
+
+CAP_POSS_PER_HOUR = 50293
+TAMPING_COST_PER_M = 40
+GRINDING_COST_PER_M = 50
+
+TRACK_RENEWAL_COST = 6500 * TRACK_LENGTH_M + get_LCA_renewal(TRACK_LENGTH_M, 'Track')
+RAIL_RENEWAL_COST = 1500 * TRACK_LENGTH_M + get_LCA_renewal(TRACK_LENGTH_M, 'Rail')
+
+POSS_GRINDING = 2
+POSS_TAMPING = 5
+POSS_GRINDING_TWICE = POSS_GRINDING * 5 / 3
+
+INIT_GAUGE_LEVEL = 1440
+
+H_MAX = 14
+RCF_MAX = 0.5
+
+# === HELPER FUNCTIONS ===
+
+def calculate_grinding_costs_rail(grinding_freq, since, gauge, H_curr, RCF_res_grinding, H_table, NW_table, RCF_residual_table, RCF_depth_table, y, gauge_levels):
+    delta_H = PchipInterpolator(gauge_levels, NW_table[NW_table['Month'] == since]['Value'])(gauge)
+    grinding_cost = 0
+    cap_cost = 0
+    if since == grinding_freq:
+        grinding_cost = GRINDING_COST_PER_M * TRACK_LENGTH_M / (1 + DISCOUNT_RATE) ** y
+        cap_cost = POSS_GRINDING * CAP_POSS_PER_HOUR / (1 + DISCOUNT_RATE) ** y
+        H_curr += PchipInterpolator(gauge_levels, H_table[H_table['Month'] == grinding_freq]['Value'])(gauge) - delta_H
+        rcf_grinding = PchipInterpolator(gauge_levels, RCF_residual_table[RCF_residual_table['Month'] == grinding_freq]['Value'])(gauge)
+        if rcf_grinding > 0:
+            RCF_res_grinding += rcf_grinding
+        RCF_residual_curr = RCF_res_grinding
+        since = 0
+    else:
+        RCF_residual_curr = RCF_res_grinding + PchipInterpolator(gauge_levels, RCF_depth_table[RCF_depth_table['Month'] == since]['Value'])(gauge)
+        H_curr += delta_H
+    return grinding_cost, cap_cost, H_curr, RCF_res_grinding, RCF_residual_curr, since + 1
+
+def calculate_tamping_costs_rail(tamping_freq, since, gauge, y):
+    tamping_cost = 0
+    cap_cost = 0
+    if since == tamping_freq:
+        tamping_cost = TAMPING_COST_PER_M * TRACK_LENGTH_M / (1 + DISCOUNT_RATE) ** y
+        cap_cost = POSS_TAMPING * CAP_POSS_PER_HOUR / (1 + DISCOUNT_RATE) ** y
+        gauge = INIT_GAUGE_LEVEL
+        since = 0
+    return tamping_cost, cap_cost, gauge, since + 1
+
+def handle_double_grinding_rail(RCF_residual_curr, since, gauge, H_table, y, RCF_res_grinding, gauge_levels):
+    if RCF_residual_curr >= RCF_MAX:
+        RCF_residual_curr = 0
+        RCF_res_grinding = 0
+        grinding_cost_per_meter_twice = GRINDING_COST_PER_M * 5 / 3
+        grinding_cost = grinding_cost_per_meter_twice * TRACK_LENGTH_M / (1 + DISCOUNT_RATE) ** y
+        cap_cost = POSS_GRINDING_TWICE * CAP_POSS_PER_HOUR / (1 + DISCOUNT_RATE) ** y
+        delta_H_1 = PchipInterpolator(gauge_levels, H_table[H_table['Month'] == since + 1]['Value'])(gauge)
+        delta_H_2 = PchipInterpolator(gauge_levels, H_table[H_table['Month'] == 1]['Value'])(gauge)
+        delta_H_total = delta_H_1 + delta_H_2
+        since = 0
+        return grinding_cost, cap_cost, delta_H_total, RCF_res_grinding, RCF_residual_curr, since + 1
+    return 0, 0, 0, RCF_res_grinding, RCF_residual_curr, since
+
+def handle_rail_renewal_rail(H_curr, y):
+    if H_curr > H_MAX:
+        renewal_costs = RAIL_RENEWAL_COST / (1 + DISCOUNT_RATE) ** y
+        return True, renewal_costs
+    return False, 0
+
+# === MAIN FUNCTION ===
+
+def get_annuity_refactored(
+    data_df,
+    maint_strategy,
+    high_or_low_rail='High',
+    track_results=False,
+    gauge_widening_per_year=SELECTED_GAUGE_WIDENING,
+    radius=SELECTED_RADIUS,
+):
+    """
+    Calculate the annuity (LCC per year) and track lifetime for a single rail.
+    """
+    data_df_radius = data_df[data_df['Radius'] == radius]
+
+    # --- LOAD TABLES ---
+    H_table = get_table(data_df_radius, 'h-index', profile=SELECTED_PROFILE, rail=high_or_low_rail, radius=radius)
+    NW_table = get_table(data_df_radius, 'wear', profile=SELECTED_PROFILE, rail=high_or_low_rail, radius=radius)
+    RCF_residual_table = get_table(data_df_radius, 'rcf-residual', profile=SELECTED_PROFILE, rail=high_or_low_rail, radius=radius)
+    RCF_depth_table = get_table(data_df_radius, 'rcf-depth', profile=SELECTED_PROFILE, rail=high_or_low_rail, radius=radius)
+
+    gauge_levels = H_table['Gauge'].unique()
+    gauge_levels.sort()
+
+    grinding_freq, tamping_freq = maint_strategy
+
+    accumulated_maintenance_costs = 0
+    accumulated_renewal_costs = TRACK_RENEWAL_COST
+    accumulated_cap_costs = 0
+
+    H_curr = 0
+    gauge_curr = gauge_levels[0]
+    RCF_res_grinding = 0
+    RCF_residual_curr = 0
+
+    latest_grinding_since = 1
+    latest_tamping_since = 1
+
+    rail_lifetime = TECH_LIFE_YEARS
+
+    historical_data = [] if track_results else None
+
+    for m in range(1, MAX_MONTHS + 1):
+        y = m / 12
+        gauge_curr += gauge_widening_per_year / 12
+
+        # Grinding
+        grinding_cost, cap_cost, H_curr, RCF_res_grinding, RCF_residual_curr, latest_grinding_since = calculate_grinding_costs_rail(
+            grinding_freq, latest_grinding_since, gauge_curr, H_curr, RCF_res_grinding,
+            H_table, NW_table, RCF_residual_table, RCF_depth_table, y, gauge_levels
+        )
+        accumulated_maintenance_costs += grinding_cost
+        accumulated_cap_costs += cap_cost
+
+        # Tamping
+        tamping_cost, cap_cost, gauge_curr, latest_tamping_since = calculate_tamping_costs_rail(
+            tamping_freq, latest_tamping_since, gauge_curr, y
+        )
+        accumulated_maintenance_costs += tamping_cost
+        accumulated_cap_costs += cap_cost
+
+        # Double grinding if RCF exceeds max
+        grinding_cost, cap_cost, delta_H, RCF_res_grinding, RCF_residual_curr, latest_grinding_since = handle_double_grinding_rail(
+            RCF_residual_curr, latest_grinding_since, gauge_curr, H_table, y, RCF_res_grinding, gauge_levels
+        )
+        accumulated_maintenance_costs += grinding_cost
+        accumulated_cap_costs += cap_cost
+        H_curr += delta_H
+
+        # Rail renewal if H-index exceeds max
+        renewal_needed, renewal_costs = handle_rail_renewal_rail(H_curr, y)
+        if renewal_needed:
+            rail_lifetime = y
+            accumulated_renewal_costs += renewal_costs 
+            break
+
+        if track_results:
+            historical_data.append({
+                'Month': m,
+                'H_curr': H_curr,
+                'RCF_residual_curr': RCF_residual_curr,
+                'Gauge_curr': gauge_curr
+            })
+
+    annuity = (accumulated_cap_costs + accumulated_maintenance_costs + accumulated_renewal_costs) / TRACK_LENGTH_M / rail_lifetime
+
+    if track_results:
+        return annuity, rail_lifetime, historical_data
+    return annuity, rail_lifetime
+
+
+def plot_annuity_and_lifetime_with_tamping(tamping_frequency, data_df, high_or_low_rail='High'):
+    """
+    Plots the variation of annuity and track lifetime with grinding frequency for a given tamping frequency.
+
+    Parameters:
+    - tamping_frequency: Tamping frequency (in months).
+    - data_df: DataFrame containing the input data.
+    """
+
+
+    # Define grinding frequencies
+    grinding_frequencies = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+
+    # Initialize lists to store results
+    annuity_values = []
+    lifetime_values = []
+    lcc_values = []
+
+    # Calculate annuity and lifetime for each grinding frequency
+    for grinding_freq in grinding_frequencies:
+        maint_strategy = (grinding_freq, tamping_frequency)
+        annuity, rail_lifetime = get_annuity_refactored(
+            data_df,
+            maint_strategy,
+            high_or_low_rail=high_or_low_rail,
+            track_results=False,
+            gauge_widening_per_year=SELECTED_GAUGE_WIDENING,
+            radius=SELECTED_RADIUS,
+        )
+        annuity_values.append(annuity)
+        lifetime_values.append(rail_lifetime)
+        lcc_values.append(annuity * rail_lifetime)
+
+    # Plot the results
+    fig, ax1 = plt.subplots()
+
+    # Plot annuity on the left y-axis
+    ax1.set_xlabel('Grinding Frequency (months)')
+    ax1.set_ylabel('Annuity (SEK/m/year) or LCC (SEK/m)', color='tab:blue')
+    ax1.plot(grinding_frequencies, annuity_values, color='tab:blue', label='Annuity')
+    ax1.tick_params(axis='y', labelcolor='tab:blue')
+
+    # Plot LCC values on the left y-axis as well, with a different style
+    ax1.plot(grinding_frequencies, lcc_values, color='tab:green', linestyle='--', marker='s', label='Total LCC')
+
+    # Create a second y-axis for Track Lifetime
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('Track Lifetime (years)', color='tab:orange')
+    ax2.plot(grinding_frequencies, lifetime_values, color='tab:orange', label='Track Lifetime')
+    ax2.tick_params(axis='y', labelcolor='tab:orange')
+
+    # Add a title and grid
+    plt.title(f'Variation of Annuity, Total LCC, and Track Lifetime with Grinding Frequency\n(gauge correction: {tamping_frequency} months)')
+    fig.tight_layout()
+    plt.grid()
+
+    # Add legends for both y-axes
+    lines_1, labels_1 = ax1.get_legend_handles_labels()
+    lines_2, labels_2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper right')
+
+    # Show the plot
+    plt.show()
+
+    # Print where the minimum is reached
+    min_index = np.argmin(annuity_values)
+    min_grinding_freq = grinding_frequencies[min_index]
+    min_annuity = annuity_values[min_index]
+    min_lifetime = lifetime_values[min_index]
+    print(f"Minimum annuity of {min_annuity:.2f} SEK/m/year is reached at a grinding frequency of {min_grinding_freq} months, with a rail lifetime of {min_lifetime:.2f} years.")
+
+
+def plot_historical_data_single_rail(historical_data):
+    """
+    Plots the historical data for H_curr, RCF_residual_curr, and Gauge_curr over time.
+
+    Parameters:
+    - historical_data: List of dictionaries containing historical data with keys 'Month', 'H_curr', 'RCF_residual_curr', and 'Gauge_curr'.
+    """
+
+    historical_df = pd.DataFrame(historical_data)
+
+    # figure size
+    fig_size=(7, 4)
+
+    # Plot H_curr
+    plt.figure(figsize=fig_size)
+    sns.lineplot(data=historical_df, x='Month', y='H_curr', marker='o')
+    plt.title('Historical H_curr Values')
+    plt.xlabel('Month')
+    plt.ylabel('H_curr')
+    plt.grid()
+    plt.show()
+
+    # Plot RCF_residual_curr
+    plt.figure(figsize=fig_size)
+    sns.lineplot(data=historical_df, x='Month', y='RCF_residual_curr', marker='o')
+    plt.title('Historical RCF_residual_curr Values')
+    plt.xlabel('Month')
+    plt.ylabel('RCF_residual_curr')
+    plt.grid()
+    plt.show()
+
+    # Plot Gauge_curr
+    plt.figure(figsize=fig_size)
+    sns.lineplot(data=historical_df, x='Month', y='Gauge_curr', marker='o')
+    plt.title('Historical Gauge_curr Values')
+    plt.xlabel('Month')
+    plt.ylabel('Gauge_curr')
+    plt.grid()
+    plt.show()
+
+    # print the lifetime in months, the last month before H_curr > H_max
+    lifetime_months = historical_df['Month'].iloc[-1]
+    print(f"Track lifetime in months: {lifetime_months}")
+    # print the lifetime in years
+    lifetime_years = lifetime_months / 12
+    print(f"Track lifetime in years: {lifetime_years:.2f}")
+
+
+
+def plot_historical_data_both_rails(history_low, history_high):
+    """
+    Plots the historical data for H_curr, RCF_residual_curr, and Gauge_curr over time
+    for both low and high rails on the same graphs.
+
+    Parameters:
+    - history_low: List of dicts for the low rail (keys: 'Month', 'H_curr', 'RCF_residual_curr', 'Gauge_curr')
+    - history_high: List of dicts for the high rail (same keys)
+    """
+    df_low = pd.DataFrame(history_low)
+    df_high = pd.DataFrame(history_high)
+    fig_size = (10, 4)
+
+    # Plot H_curr
+    plt.figure(figsize=fig_size)
+    sns.lineplot(data=df_low, x='Month', y='H_curr', marker='o', label='Low Rail')
+    sns.lineplot(data=df_high, x='Month', y='H_curr', marker='o', label='High Rail')
+    plt.title('Historical H_curr Values (Low & High Rail)')
+    plt.xlabel('Month')
+    plt.ylabel('H_curr')
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+    # Plot RCF_residual_curr
+    plt.figure(figsize=fig_size)
+    sns.lineplot(data=df_low, x='Month', y='RCF_residual_curr', marker='o', label='Low Rail')
+    sns.lineplot(data=df_high, x='Month', y='RCF_residual_curr', marker='o', label='High Rail')
+    plt.title('Historical RCF_residual_curr Values (Low & High Rail)')
+    plt.xlabel('Month')
+    plt.ylabel('RCF_residual_curr')
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+    # Plot Gauge_curr
+    plt.figure(figsize=fig_size)
+    sns.lineplot(data=df_low, x='Month', y='Gauge_curr', marker='o')
+    plt.title('Historical Gauge_curr Values (Low & High Rail)')
+    plt.xlabel('Month')
+    plt.ylabel('Gauge_curr')
+    plt.grid()
+    plt.show()
