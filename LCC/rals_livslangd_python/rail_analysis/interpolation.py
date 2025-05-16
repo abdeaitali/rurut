@@ -179,20 +179,20 @@ def plot_heatmap(data, condition, zlabel):
 
 def plot_all_interpolated_tables(data, radius=1465):
     """
-    Plots six figures in a single graph: two columns (Inner/Low Rail and High Rail)
-    and three rows (H-index, Wear, and RCF).
+    Plots eight figures in a single graph: two columns (Inner/Low Rail and High Rail)
+    and four rows (H-index, Wear, RCF-residual, RCF-depth).
 
     Args:
         data (pd.DataFrame): The interpolated data to plot.
         radius (int): The radius to filter the data.
     """
     # Define the conditions and rail types
-    conditions = ['h-index', 'wear', 'rcf-residual']
+    conditions = ['h-index', 'wear', 'rcf-residual', 'rcf-depth']
     rail_types = ['inner', 'high']
 
     # Create a figure with subplots
-    fig, axes = plt.subplots(3, 2, figsize=(10, 15), sharex=True, sharey=True)
-    fig.subplots_adjust(hspace=0.4, wspace=0.3)
+    fig, axes = plt.subplots(4, 2, figsize=(8, 14), sharex=True, sharey=True)
+    fig.subplots_adjust(hspace=0.3, wspace=0.2)
 
     for i, condition in enumerate(conditions):
         for j, rail in enumerate(rail_types):
@@ -204,6 +204,7 @@ def plot_all_interpolated_tables(data, radius=1465):
             ]
 
             if filtered_data.empty:
+                axes[i, j].set_visible(False)
                 continue
 
             # Extract unique gauges and months
@@ -222,7 +223,7 @@ def plot_all_interpolated_tables(data, radius=1465):
             fig.colorbar(surf, ax=ax, orientation='vertical', shrink=0.8)
 
             # Set labels and title
-            ax.set_title(f'{condition.capitalize()} - {rail.capitalize()}', fontsize=12)
+            ax.set_title(f'{condition} - {rail.capitalize()}', fontsize=12)
             ax.set_xlabel('Months (since last grinding)', fontsize=10)
             ax.set_ylabel('Track gauge (mm)', fontsize=10)
     plt.show()
