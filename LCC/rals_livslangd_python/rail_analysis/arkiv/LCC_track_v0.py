@@ -1,4 +1,3 @@
-import numpy as np  # type: ignore
 from scipy.interpolate import PchipInterpolator  # type: ignore
 from rail_analysis.rail_measures import get_table
 
@@ -12,7 +11,7 @@ SELECTED_RADIUS = '1465'
 
 DR = 0.04
 TRACK_LEN = 1000
-TECH_LIFE_Y = 15
+TECH_LIFE_Y = 30 
 MAX_MONTHS = TECH_LIFE_Y * 12
 
 C_POSS = 50293
@@ -22,7 +21,7 @@ T_GRIND_HR = 2
 T_TAMP_HR  = 5
 
 H_MAX = 14
-RCF_MAX = 0.5
+RCF_MAX = 0.5# just for testing, but the real value is 0.5 mm
 
 TRACK_RENEW = 6500 * TRACK_LEN
 RAIL_RENEW  = 1500 * TRACK_LEN
@@ -64,7 +63,7 @@ def get_annuity_track(
 
     # --- STATE & ACCUMULATORS ---
     PV_maint = 0.0
-    PV_renew = TRACK_RENEW # TODO: add LCA
+    PV_renew = 0.0#TRACK_RENEW # TODO: add LCA
     PV_cap   = 0.0
 
     H_H = H_L = 0.0
@@ -87,89 +86,101 @@ def get_annuity_track(
             freq = grinding_freq_high if rail=='H' else grinding_freq_low
             since = since_grind_H if rail=='H' else since_grind_L
             H_curr = H_H if rail=='H' else H_L
-            R_curr = R_H if rail=='H' else R_L
+            RCF_curr = R_H if rail=='H' else R_L
             Ht = Ht_H if rail=='H' else Ht_L
             NW = NW_H if rail=='H' else NW_L
             RRes = RCF_RES_H if rail=='H' else RCF_RES_L
             RDep = RCF_DEP_H if rail=='H' else RCF_DEP_L
 
+            # natural wear
+            ΔN   = PchipInterpolator(gauge_levels, NW[NW['Month']==since]['Value'])(gauge)
+            
+            # check if grinding is scheduled
             if since == freq:
-                # apply grinding cost
+                # add grinding cost including capacity cost # TODO: may also add LCA
                 PV_maint += (C_GRIND*TRACK_LEN)/(1+DR)**t
                 PV_cap   += (T_GRIND_HR*C_POSS)/(1+DR)**t
 
-                # update H-index
+                # update H-index using H-index table (minus natural wear)
                 ΔH_g = PchipInterpolator(gauge_levels, Ht[Ht['Month']==freq]['Value'])(gauge)
-                ΔN   = PchipInterpolator(gauge_levels, NW[NW['Month']==since]['Value'])(gauge)
                 H_curr += ΔH_g - ΔN
 
-                # update RCF residual
+                # update RCF using RCF-residual
                 rcf_r = PchipInterpolator(gauge_levels, RRes[RRes['Month']==freq]['Value'])(gauge)
                 if rcf_r>0:
-                    R_curr += rcf_r
+                    RCF_curr += rcf_r
 
+                # update months since grinding
                 since = 0
             else:
-                # natural wear + new RCF
-                # if NW[NW['Month']==since] is empty, use the last value
-                if NW[NW['Month']==since].empty:
-                    tt = NW[NW['Month']==since-1].iloc[-1]
-                ΔN = PchipInterpolator(gauge_levels, NW[NW['Month']==since]['Value'])(gauge)
-                ΔR = PchipInterpolator(gauge_levels, RDep[RDep['Month']==since]['Value'])(gauge)
+                # update H-index using natural wear
                 H_curr += ΔN
-                R_curr += ΔR
+
+                # update RCF using RCF-depth
+                ΔR = PchipInterpolator(gauge_levels, RDep[RDep['Month']==since]['Value'])(gauge)
+                RCF_curr += ΔR
 
             # save back
             if rail=='H':
                 since_grind_H = since+1
-                H_H, R_H      = H_curr, R_curr
+                H_H, R_H      = H_curr, RCF_curr
             else:
                 since_grind_L = since+1
-                H_L, R_L      = H_curr, R_curr
+                H_L, R_L      = H_curr, RCF_curr
 
         # --- Gauge correction (tamping) ---
         if since_tamp == gauge_freq:
+            # add tamping cost including capacity cost # TODO: may also add LCA
             PV_maint += (C_TAMP*TRACK_LEN)/(1+DR)**t
             PV_cap   += (T_TAMP_HR*C_POSS)/(1+DR)**t
+            # update gauge
             gauge     = gauge_levels[0]
+            # update months since tamping
             since_tamp= 0
         since_tamp += 1
 
         # --- Double grind if RCF excess ---
         for rail, since_attr in (('H', 'since_grind_H'), ('L','since_grind_L')):
-            R_curr = R_H if rail=='H' else R_L
+            RCF_curr = R_H if rail=='H' else R_L
             H_curr = H_H if rail=='H' else H_L
             since   = locals()[since_attr]
 
-            if R_curr >= RCF_MAX:
-                # double grind
+            if RCF_curr >= RCF_MAX:
+                # add milling costs (less than double grinding costs) # TODO: may also add LCA
                 PV_maint += (5/3*C_GRIND*TRACK_LEN)/(1+DR)**t
                 PV_cap   += (5/3*T_GRIND_HR*C_POSS)/(1+DR)**t
 
+                # update H-index using H-index table (twice)
                 ΔH1 = PchipInterpolator(gauge_levels, Ht_H[Ht_H['Month']==since+1]['Value'])(gauge)
                 ΔH2 = PchipInterpolator(gauge_levels, Ht_H[Ht_H['Month']==1]['Value'])(gauge)
                 H_curr += ΔH1 + ΔH2
-                R_curr  = 0
+
+                # reset RCF to zero and months since grinding
+                RCF_curr  = 0
                 since   = 1
 
             # save back
             if rail=='H':
-                H_H, R_H = H_curr, R_curr
+                H_H, R_H = H_curr, RCF_curr
                 since_grind_H = since
             else:
-                H_L, R_L = H_curr, R_curr
+                H_L, R_L = H_curr, RCF_curr
                 since_grind_L = since
 
         # --- Rail renewal if worn out ---
-        for H_curr, R_curr, name in ((H_H,R_H,'H'),(H_L,R_L,'L')):
+        for H_curr, RCF_curr, name in ((H_H,R_H,'H'),(H_L,R_L,'L')):
             if H_curr > H_MAX:
-                PV_renew += RAIL_RENEW/(1+DR)**t # TODO: add LCA
+                # add rail renewal costs # TODO: may also add LCA
+                PV_renew += RAIL_RENEW/(1+DR)**t
+                # reset H-index and RCF to zero (new rail)
                 if name=='H': H_H, R_H = 0,0
                 else:         H_L, R_L = 0,0
 
         # --- Check technical track renewal ---
         if m == MAX_MONTHS:
             lifetime = t
+            # add track renewal costs # TODO: may also add LCA
+            PV_renew += TRACK_RENEW/(1+DR)**t
             break
 
         if track_results:
@@ -200,7 +211,7 @@ def plot_historical_data(historical_data):
     historical_df = pd.DataFrame(historical_data)
 
     # figure size
-    fig_size = (10, 6)
+    fig_size = (10, 5)
 
     # Plot H_index for high and low rails
     plt.figure(figsize=fig_size)

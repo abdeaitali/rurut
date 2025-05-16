@@ -1,4 +1,56 @@
 # rail_analysis/LCC.py
+"""
+Key Features:
+-------------
+
+Dependencies:
+-------------
+- numpy
+- matplotlib
+- pandas
+- seaborn
+- scipy.interpolate
+- rail_analysis.rail_measures.get_table
+- rail_analysis.constants (various constants)
+
+Usage:
+------
+Import this module to perform LCC analysis for railways, simulate different maintenance strategies,
+and visualize the impact of grinding and tamping frequencies on rail lifetime and costs.
+
+Functions:
+----------
+- calculate_grinding_costs_rail: Computes grinding costs and updates rail condition.
+- calculate_tamping_costs_rail: Computes tamping costs and updates gauge.
+- handle_double_grinding_rail: Handles double grinding events when RCF exceeds threshold.
+- handle_rail_renewal_rail: Checks and processes rail renewal based on wear.
+- get_annuity_refactored: Main function to compute annuity and rail lifetime for a given strategy.
+- plot_annuity_and_lifetime_with_tamping: Visualizes annuity, LCC, and lifetime vs. grinding frequency.
+- plot_historical_data_single_rail: Plots historical rail condition for a single rail.
+- plot_historical_data_both_rails: Plots historical rail condition for both low and high rails.
+
+Note:
+-----
+This module assumes the presence of specific data structures and constants defined in the
+rail_analysis package. Ensure all dependencies are installed and data is properly formatted.
+
+This module provides a refactored implementation for rail Life Cycle Cost (LCC) analysis, 
+utilizing modular helper functions to handle the logic for grinding, tamping, double grinding, 
+and rail renewal. The main function computes the annuity (LCC per year) and rail lifetime 
+based on maintenance strategies, using input data and constants for rail wear, grinding, 
+tamping, and renewal costs. Additional plotting functions are included to visualize the 
+variation of annuity, total LCC, and rail lifetime with grinding frequency, as well as 
+historical evolution of key rail parameters over time.
+
+Key features:
+- Modular helper functions for grinding, tamping, double grinding, and renewal calculations.
+- Main LCC calculation function supporting flexible maintenance strategies.
+- Visualization utilities for annuity, LCC, rail lifetime, and historical parameter tracking.
+"""
+
+# LCC_single_rail.py
+# This module includes a refactored calculation for rail Life Cycle Cost (LCC) analysis,
+# using helper functions to modularize grinding, tamping, double grinding, and renewal logic.
 
 import numpy as np # type: ignore
 import matplotlib.pyplot as plt # type: ignore
@@ -7,33 +59,28 @@ import seaborn as sns # type: ignore
 from scipy.interpolate import PchipInterpolator # type: ignore
 
 from rail_analysis.rail_measures import get_table
-from rail_analysis.LCA import get_LCA_renewal
 
-# === GLOBAL PARAMETERS ===
-SELECTED_PROFILE = 'MB4'  
-SELECTED_GAUGE_WIDENING = 1  
-SELECTED_RADIUS = '1465'
-
-DISCOUNT_RATE = 0.04
-TRACK_LENGTH_M = 1000
-TECH_LIFE_YEARS = 15
-MAX_MONTHS = 12 * TECH_LIFE_YEARS
-
-CAP_POSS_PER_HOUR = 50293
-TAMPING_COST_PER_M = 40
-GRINDING_COST_PER_M = 50
-
-TRACK_RENEWAL_COST = 6500 * TRACK_LENGTH_M + get_LCA_renewal(TRACK_LENGTH_M, 'Track')
-RAIL_RENEWAL_COST = 1500 * TRACK_LENGTH_M + get_LCA_renewal(TRACK_LENGTH_M, 'Rail')
-
-POSS_GRINDING = 2
-POSS_TAMPING = 5
-POSS_GRINDING_TWICE = POSS_GRINDING * 5 / 3
-
-INIT_GAUGE_LEVEL = 1440
-
-H_MAX = 14
-RCF_MAX = 0.5
+from rail_analysis.constants import (
+    GRINDING_COST_PER_M,
+    TRACK_LENGTH_M,
+    DISCOUNT_RATE,
+    POSS_GRINDING,
+    CAP_POSS_PER_HOUR,
+    TAMPING_COST_PER_M,
+    POSS_TAMPING,
+    INIT_GAUGE_LEVEL,
+    RCF_MAX,
+    POSS_GRINDING_TWICE,
+    POSS_NEW_RAIL,
+    H_MAX,
+    RAIL_RENEWAL_COST,
+    TRACK_RENEWAL_COST,
+    TECH_LIFE_YEARS,
+    MAX_MONTHS,
+    SELECTED_GAUGE_WIDENING,
+    SELECTED_RADIUS,
+    SELECTED_PROFILE,
+)
 
 # === HELPER FUNCTIONS ===
 
@@ -81,11 +128,11 @@ def handle_double_grinding_rail(RCF_residual_curr, since, gauge, H_table, y, RCF
 
 def handle_rail_renewal_rail(H_curr, y):
     if H_curr > H_MAX:
-        renewal_costs = RAIL_RENEWAL_COST / (1 + DISCOUNT_RATE) ** y
+        renewal_costs = (RAIL_RENEWAL_COST + POSS_NEW_RAIL*CAP_POSS_PER_HOUR) / (1 + DISCOUNT_RATE) ** y
         return True, renewal_costs
     return False, 0
 
-# === MAIN FUNCTION ===
+# === MAIN LCC FUNCTION (REFACTORED) ===
 
 def get_annuity_refactored(
     data_df,
@@ -176,6 +223,8 @@ def get_annuity_refactored(
     return annuity, rail_lifetime
 
 
+# === PLOTTING FUNCTIONS ===
+
 def plot_annuity_and_lifetime_with_tamping(tamping_frequency, data_df, high_or_low_rail='High'):
     """
     Plots the variation of annuity and track lifetime with grinding frequency for a given tamping frequency.
@@ -223,12 +272,12 @@ def plot_annuity_and_lifetime_with_tamping(tamping_frequency, data_df, high_or_l
 
     # Create a second y-axis for Track Lifetime
     ax2 = ax1.twinx()
-    ax2.set_ylabel('Track Lifetime (years)', color='tab:orange')
-    ax2.plot(grinding_frequencies, lifetime_values, color='tab:orange', label='Track Lifetime')
+    ax2.set_ylabel('Rail Lifetime (years)', color='tab:orange')
+    ax2.plot(grinding_frequencies, lifetime_values, color='tab:orange', label='Rail Lifetime')
     ax2.tick_params(axis='y', labelcolor='tab:orange')
 
     # Add a title and grid
-    plt.title(f'Variation of Annuity, Total LCC, and Track Lifetime with Grinding Frequency\n(gauge correction: {tamping_frequency} months)')
+    plt.title(f'Variation of Annuity, Total LCC, and Rail Lifetime with Grinding Frequency\n(gauge correction: every {tamping_frequency} months)')
     fig.tight_layout()
     plt.grid()
 
@@ -294,7 +343,6 @@ def plot_historical_data_single_rail(historical_data):
     # print the lifetime in years
     lifetime_years = lifetime_months / 12
     print(f"Track lifetime in years: {lifetime_years:.2f}")
-
 
 
 def plot_historical_data_both_rails(history_low, history_high):

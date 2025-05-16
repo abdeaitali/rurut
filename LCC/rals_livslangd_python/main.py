@@ -1,5 +1,5 @@
 from preprocessings.read_input_data import read_input_data
-from rail_analysis.LCC import get_annuity
+from LCC.rals_livslangd_python.rail_analysis.LCC_single_rail import get_annuity
 from rail_analysis.rail_measures import get_h_index, get_wear_data, get_rcf_residual, get_rcf_depth
 
 import pandas as pd # type: ignore
@@ -14,28 +14,52 @@ based on the input data provided in a CSV file.
 
 import os
 
+from LCC.rals_livslangd_python.rail_analysis.LCC_two_rails import get_annuity_track_refactored
+from LCC.rals_livslangd_python.rail_analysis.LCC_two_rails import get_annuity_track_refactored
+
+from rail_analysis.interpolation import interpolate_rail_data
+from rail_analysis.interpolation import plot_all_interpolated_tables
+
 def main():
     # Load input data
-    file_path = './LCC/rals_livslangd_python/data/raw/raw_data_structured_with_load.csv'
+    file_path = './LCC/rals_livslangd_python/data/raw/CM2025/BDL_111_results_JL_0512_2rcfs.csv'
     try:
         # print the current working directory
         print("Current working directory:", os.getcwd())
         # Read the input data
-        data = read_input_data(file_path)
+        data_df = read_input_data(file_path)
     except FileNotFoundError:
         print(f"Error: The file at {file_path} was not found.")
         return
     
+    # interpolate the data
+    data_df_interpolated = interpolate_rail_data(data_df) 
+
+    # plot the interpolated data
+    plot_all_interpolated_tables(data_df_interpolated) 
+
+    # Example usage of the function
+    grinding_freq_low = 12  # months
+    grinding_freq_high = 10  # months
+    gauge_freq = 48  # months
+
+
+
     # Perform LCC calculation
-    grinding_frequency = 12  # Example grinding frequency in months
-    tamping_frequency = 12  # Example tamping frequency in months
-    maint_strategy = (grinding_frequency, tamping_frequency)
-    annuity, rail_lifetime = get_annuity(get_h_index(data), get_wear_data(data), maint_strategy, get_rcf_residual(data), get_rcf_depth(data))
-    
-    # Print results
-    print("LCC Calculation Results:")
-    print(annuity)
-    print("Rail Lifetime:", rail_lifetime)
+    annuity, lifetime, history = get_annuity_track_refactored(
+        data_df_interpolated,
+        grinding_freq_low,
+        grinding_freq_high,
+        gauge_freq,
+        track_results=True
+    )
+
+    print(f"Annuity: {annuity:.2f} €/km/year")
+    print(f"Lifetime: {lifetime:.2f} years")
+
+
+    # plot the history of the results
+    plot_historical_data(history)
 
 if __name__ == "__main__":
     main()

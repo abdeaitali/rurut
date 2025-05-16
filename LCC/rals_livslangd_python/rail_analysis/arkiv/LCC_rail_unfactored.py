@@ -1,9 +1,74 @@
 # rail_analysis/LCC.py
+"""
+LCC_rail.py
+
+This module provides functions for calculating the Life Cycle Cost (LCC) and track lifetime for railway rails, considering various maintenance strategies such as grinding and tamping. It includes utilities for plotting the impact of maintenance frequencies on annuity and track lifetime, as well as visualizing historical rail condition data.
+
+Note:
+    This version contains a long, monolithic main function (`get_annuity`) that has not been refactored into smaller sub-functions. The code prioritizes clarity of the overall calculation flow over modularity.
+
+Functions:
+    - get_annuity(H_table, NW_table, maint_strategy, RCF_residual_table, RCF_depth_table, track_results=False, gauge_widening_per_year=1):
+        Calculates the annuity (LCC per year) and track lifetime based on maintenance strategies and rail condition data. Optionally returns historical data for further analysis.
+
+    - plot_annuity_and_lifetime_with_tamping(tamping_frequency, data_df, rail_profile='MB5', load=30):
+        Plots the variation of annuity and track lifetime as a function of grinding frequency for a given tamping frequency.
+
+    - plot_historical_data(historical_data):
+        Visualizes the historical evolution of H-index, RCF residual, and gauge over time, and prints the resulting track lifetime in months and years.
+
+Dependencies:
+    - numpy
+    - matplotlib
+    - pandas
+    - seaborn
+    - scipy.interpolate
+    - rail_analysis.rail_measures
+    - rail_analysis.LCA
+
+Global Parameters:
+    Various constants for costs, technical lifetimes, and thresholds used in LCC calculations.
+"""
+
+## LCC.py
+
 
 import numpy as np # type: ignore
+import matplotlib.pyplot as plt # type: ignore
+import pandas as pd # type: ignore
+import seaborn as sns # type: ignore
 from scipy.interpolate import PchipInterpolator # type: ignore
 
+from rail_analysis.rail_measures import get_table, get_h_index, get_wear_data, get_rcf_residual, get_rcf_depth
 from rail_analysis.LCA import get_LCA_renewal
+
+# === GLOBAL PARAMETERS ===
+SELECTED_PROFILE = 'MB4'  
+SELECTED_GAUGE_WIDENING = 1  
+SELECTED_RADIUS = '1465'
+
+DISCOUNT_RATE = 0.04
+TRACK_LENGTH_M = 1000
+TECH_LIFE_YEARS = 15
+MAX_MONTHS = 12 * TECH_LIFE_YEARS
+
+CAP_POSS_PER_HOUR = 50293
+TAMPING_COST_PER_M = 40
+GRINDING_COST_PER_M = 50
+
+TRACK_RENEWAL_COST = 6500 * TRACK_LENGTH_M
+RAIL_RENEWAL_COST = 1500 * TRACK_LENGTH_M
+
+POSS_GRINDING = 2
+POSS_TAMPING = 5
+POSS_GRINDING_TWICE = POSS_GRINDING * 5 / 3
+
+H_MAX = 14
+RCF_MAX = 0.5
+
+
+# === MAIN FUNCTION ===
+
 
 def get_annuity(H_table, NW_table, maint_strategy, RCF_residual_table, RCF_depth_table, track_results=False, gauge_widening_per_year=1):
     """
@@ -38,7 +103,8 @@ def get_annuity(H_table, NW_table, maint_strategy, RCF_residual_table, RCF_depth
     poss_tamping = 5  # hours
     poss_grinding_twice = poss_grinding * 5 / 3
 
-    gauge = [1440, 1445, 1450, 1455]
+    gauge = H_table['Gauge'].unique()
+    gauge.sort()
     Xq = gauge
 
     H_max = 14  # Maximum H-index before end of life of the rail
@@ -133,10 +199,10 @@ def get_annuity(H_table, NW_table, maint_strategy, RCF_residual_table, RCF_depth
         return annuity, rail_lifetime, historical_data
     return annuity, rail_lifetime
 
-import numpy as np # type: ignore
-import matplotlib.pyplot as plt # type: ignore
 
-from rail_analysis.rail_measures import get_h_index, get_wear_data, get_rcf_residual, get_rcf_depth
+
+# === PLOTTING FUNCTIONS ===
+
 
 def plot_annuity_and_lifetime_with_tamping(tamping_frequency, data_df, rail_profile='MB5', load=30):
     """
@@ -198,8 +264,6 @@ def plot_annuity_and_lifetime_with_tamping(tamping_frequency, data_df, rail_prof
     min_lifetime = lifetime_values[min_index]
     print(f"Minimum annuity of {min_annuity:.2f} SEK/m/year is reached at a grinding frequency of {min_grinding_freq} months, with a track lifetime of {min_lifetime:.2f} years.")
 
-import pandas as pd # type: ignore
-import seaborn as sns # type: ignore
 
 def plot_historical_data(historical_data):
     """

@@ -209,13 +209,26 @@ def plot_all_interpolated_tables(data, radius=1465):
 
             # Extract unique gauges and months
             gauges = filtered_data['Gauge'].unique()
-            months = filtered_data['Month'].unique()
+            # Only show months 1, 3, 6, 9, 12
+            months_to_show = [1, 6, 9, 12]
+            filtered_data = filtered_data[filtered_data['Month'].isin(months_to_show)]
+            months = sorted(filtered_data['Month'].unique())
 
             # Create a meshgrid for the plot
             X, Y = np.meshgrid(months, gauges)
 
             # Pivot the data to create a 2D array for Z values
-            Z = filtered_data.pivot(index='Gauge', columns='Month', values='Value').values
+            Z = filtered_data.pivot(index='Gauge', columns='Month', values='Value').reindex(index=gauges, columns=months).values
+
+            # Plot the heatmap
+            ax = axes[i, j]
+            surf = ax.contourf(X, Y, Z, cmap='viridis', levels=20)
+
+            # Set labels and title
+            ax.set_title(f'{condition} - {rail.capitalize()}', fontsize=12)
+            ax.set_xlabel('Months (since last grinding)', fontsize=10)
+            ax.set_ylabel('Track gauge (mm)', fontsize=10)
+            ax.set_xticks(months_to_show)
 
             # Plot the heatmap
             ax = axes[i, j]
