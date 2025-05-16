@@ -15,14 +15,13 @@ def get_LCA_renewal(track_length, asset_type, SHARE_ELECTRICITY=0.5, YEARS=0):
     - float: Total LCA renewal cost for the specified asset type and track length.
     """
 
-    # print current directory
-    #print("Current working directory:", os.getcwd())
+    # Get the directory where this script is located
+    lca_file_path = r'c:\Users\AbdouAA\Work Folders\Documents\GitHub\rurut\LCC\rals_livslangd_python\data\raw\LCA\LCA_indata.csv'
 
     # read LCA data from a CSV file
-    lca_data = pd.read_csv('../data/raw/LCA/LCA_indata.csv', delimiter=';', encoding='utf-8')
+    lca_data = pd.read_csv(lca_file_path, delimiter=';', encoding='utf-8')
     # replace ',' with '.' in the 'Costs' column
     lca_data['Costs'] = lca_data['Costs'].str.replace(',', '.').astype(float)
-
 
     # Calculate the total renewal costs
     total_LCA_cost = lca_data[lca_data['Asset'] == asset_type]['Costs'] * track_length
