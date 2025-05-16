@@ -2,7 +2,7 @@
 
 import pandas as pd # type: ignore
 
-def get_h_index(df, profile='MB5', gauge=None, load=32.5):
+def get_h_index(df, profile='MB4', gauge=None, load=32.5):
     """
     Extracts the H-index values for a specific rail profile and optionally a gauge.
     If gauge is not provided, returns all H-index values for the profile.
@@ -18,7 +18,7 @@ def get_h_index(df, profile='MB5', gauge=None, load=32.5):
                               (and gauge, if provided), indexed by 'Gauge' and 'Month'.
                               Returns None if no matching data is found.
     """
-    h_index_data = df[(df['Profile'] == profile) & (df['Condition'] == 'H-index')]
+    h_index_data = df[(df['Profile'] == profile) & (df['Condition'] == 'h-index')]
     if gauge is not None:
         h_index_data = h_index_data[h_index_data['Gauge'] == gauge] # Changed from str(gauge)
 
@@ -31,7 +31,7 @@ def get_h_index(df, profile='MB5', gauge=None, load=32.5):
     else:
         return None
 
-def get_wear_data(df, profile='MB5', gauge=None, load=32.5):
+def get_wear_data(df, profile='MB4', gauge=None, load=32.5):
     """
     Extracts the wear data for a specific rail profile and optionally a gauge.
     If gauge is not provided, returns all wear data for the profile.
@@ -47,7 +47,7 @@ def get_wear_data(df, profile='MB5', gauge=None, load=32.5):
                               (and gauge, if provided), indexed by 'Gauge' and 'Month'.
                               Returns None if no matching data is found.
     """
-    wear_data = df[(df['Profile'] == profile) & (df['Condition'] == 'Wear')]
+    wear_data = df[(df['Profile'] == profile) & (df['Condition'] == 'wear')]
     if gauge is not None:
         wear_data = wear_data[wear_data['Gauge'] == gauge] # Changed from str(gauge)
 
@@ -60,7 +60,7 @@ def get_wear_data(df, profile='MB5', gauge=None, load=32.5):
     else:
         return None
 
-def get_rcf_residual(df, profile='MB5', gauge=None, load=32.5):
+def get_rcf_residual(df, profile='MB4', gauge=None, load=32.5):
     """
     Extracts the residual RCF data for a specific rail profile and optionally a gauge.
     If gauge is not provided, returns all residual RCF data for the profile.
@@ -76,7 +76,7 @@ def get_rcf_residual(df, profile='MB5', gauge=None, load=32.5):
                               (and gauge, if provided), indexed by 'Gauge' and 'Month'.
                               Returns None if no matching data is found.
     """
-    rcf_residual_data = df[(df['Profile'] == profile) & (df['Condition'] == 'RCF-residual')]
+    rcf_residual_data = df[(df['Profile'] == profile) & (df['Condition'] == 'rcf-residual')]
     if gauge is not None:
         rcf_residual_data = rcf_residual_data[rcf_residual_data['Gauge'] == gauge] # Changed from str(gauge)
 
@@ -89,7 +89,7 @@ def get_rcf_residual(df, profile='MB5', gauge=None, load=32.5):
     else:
         return None
 
-def get_rcf_depth(df, profile='MB5', gauge=None, load=32.5):
+def get_rcf_depth(df, profile='MB4', gauge=None, load=32.5):
     """
     Extracts the RCF depth data for a specific rail profile and optionally a gauge.
     If gauge is not provided, returns all RCF depth data for the profile.
@@ -105,7 +105,7 @@ def get_rcf_depth(df, profile='MB5', gauge=None, load=32.5):
                               (and gauge, if provided), indexed by 'Gauge' and 'Month'.
                               Returns None if no matching data is found.
     """
-    rcf_depth_data = df[(df['Profile'] == profile) & (df['Condition'] == 'RCF-depth')]
+    rcf_depth_data = df[(df['Profile'] == profile) & (df['Condition'] == 'rcf-depth')]
     if gauge is not None:
         rcf_depth_data = rcf_depth_data[rcf_depth_data['Gauge'] == gauge] # Changed from str(gauge)
 
@@ -119,7 +119,7 @@ def get_rcf_depth(df, profile='MB5', gauge=None, load=32.5):
         return None
 
 
-def get_table(df, condition, profile='MB5', gauge=None, load=32.5, rail=None, radius=None):
+def get_table(df, condition, profile='MB4', gauge=None, load=32.5, rail=None, radius=None):
     """
     Extracts data for a specific rail profile, condition, and optionally a gauge, rail, and radius.
     If gauge, rail, or radius are not provided, returns all data for the profile and condition.
