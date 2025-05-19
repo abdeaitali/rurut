@@ -360,9 +360,9 @@ def plot_historical_data_both_rails(history_low, history_high):
 
     # Plot H_curr
     plt.figure(figsize=fig_size)
-    sns.lineplot(data=df_low, x='Month', y='H_curr', marker='o', label='Low Rail')
     sns.lineplot(data=df_high, x='Month', y='H_curr', marker='o', label='High Rail')
-    plt.title('Historical H_curr Values (Low & High Rail)')
+    sns.lineplot(data=df_low, x='Month', y='H_curr', marker='o', label='Low Rail')
+    plt.title('Historical H_curr Values (High & Low Rail)')
     plt.xlabel('Month')
     plt.ylabel('H_curr')
     plt.legend()
@@ -371,9 +371,9 @@ def plot_historical_data_both_rails(history_low, history_high):
 
     # Plot RCF_residual_curr
     plt.figure(figsize=fig_size)
-    sns.lineplot(data=df_low, x='Month', y='RCF_residual_curr', marker='o', label='Low Rail')
     sns.lineplot(data=df_high, x='Month', y='RCF_residual_curr', marker='o', label='High Rail')
-    plt.title('Historical RCF_residual_curr Values (Low & High Rail)')
+    sns.lineplot(data=df_low, x='Month', y='RCF_residual_curr', marker='o', label='Low Rail')
+    plt.title('Historical RCF_residual_curr Values (High & Low Rail)')
     plt.xlabel('Month')
     plt.ylabel('RCF_residual_curr')
     plt.legend()
@@ -382,9 +382,11 @@ def plot_historical_data_both_rails(history_low, history_high):
 
     # Plot Gauge_curr
     plt.figure(figsize=fig_size)
-    sns.lineplot(data=df_low, x='Month', y='Gauge_curr', marker='o')
-    plt.title('Historical Gauge_curr Values (Low & High Rail)')
+    sns.lineplot(data=df_high, x='Month', y='Gauge_curr', marker='o', label='High Rail')
+    sns.lineplot(data=df_low, x='Month', y='Gauge_curr', marker='o', label='Low Rail')
+    plt.title('Historical Gauge_curr Values (High & Low Rail)')
     plt.xlabel('Month')
     plt.ylabel('Gauge_curr')
+    plt.legend()
     plt.grid()
     plt.show()

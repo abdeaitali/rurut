@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 
 # === HELPER FUNCTIONS ===
 
-def calculate_grinding_costs(rail, freq, since, gauge, H_curr, RCF_curr, Ht, NW, RRes, RDep, gauge_levels, t):
+def calculate_grinding_costs(freq, since, gauge, H_curr, RCF_curr, Ht, NW, RRes, RDep, gauge_levels, t):
     """
     Calculate grinding costs and update H-index and RCF values for a rail.
     """
@@ -41,7 +41,7 @@ def calculate_grinding_costs(rail, freq, since, gauge, H_curr, RCF_curr, Ht, NW,
         # Update RCF using RCF-residual
         rcf_r = PchipInterpolator(gauge_levels, RRes[RRes['Month'] == freq]['Value'])(gauge)
         if rcf_r > 0:
-            RCF_curr += rcf_r
+            RCF_curr += rcf_r # check this !
 
         since = 0
     else:
@@ -72,7 +72,7 @@ def calculate_tamping_costs(since_tamp, gauge_freq, gauge, t):
     return tamping_cost, capacity_cost, gauge, since_tamp + 1
 
 
-def handle_double_grinding(rail, since_attr, gauge, H_curr, RCF_curr, gauge_levels, t, Ht_H):
+def handle_double_grinding(since_attr, gauge, H_curr, RCF_curr, gauge_levels, t, Ht_H):
     """
     Handle double grinding if RCF exceeds the maximum threshold.
     """
@@ -119,7 +119,7 @@ def get_annuity_track_refactored(
     profile_high_rail=SELECTED_PROFILE,
     track_results=False,
     gauge_widening_per_year=SELECTED_GAUGE_WIDENING,
-    radius=SELECTED_RADIUS, track_life=TECH_LIFE_YEARS,
+    radius=SELECTED_RADIUS, track_life=TECH_LIFE_YEARS, plot_timeline=False
 ):
     """
     Refactored version of get_annuity_track using helper functions.
@@ -268,6 +268,11 @@ def get_annuity_track_refactored(
                     PV_cap_L += cap_renewal_cost
                     H_L, R_L = 0, 0
 
+        if track_results:
+            history.append({
+                'Month': m, 'H_H': H_H, 'RCF_H': R_H,
+                'H_L': H_L, 'RCF_L': R_L, 'Gauge': gauge
+            })
 
         # if both rails are renewed, we can stop the simulation
         if lifetime_H > 0 and lifetime_L > 0:
@@ -289,11 +294,7 @@ def get_annuity_track_refactored(
             })
             break
 
-        if track_results:
-            history.append({
-                'Month': m, 'H_H': H_H, 'RCF_H': R_H,
-                'H_L': H_L, 'RCF_L': R_L, 'Gauge': gauge
-            })
+
 
     # --- END OF SIMULATION ---
 
@@ -307,7 +308,7 @@ def get_annuity_track_refactored(
 
     optimal_option = min(renewal_options, key=lambda x: x["Annuity"])
 
-    if track_results:
+    if plot_timeline:
         plot_renewal_options(renewal_options)
 
 
@@ -338,7 +339,7 @@ def plot_renewal_options(renewal_options):
     for i, label in enumerate(labels):
         plt.annotate(label, (lifetimes[i], annuities[i]), textcoords="offset points", xytext=(5, 5), ha='left', fontsize=9)
 
-    plt.xlabel('Lifetime (years)')
+    plt.xlabel('Lifetime (months)')
     plt.ylabel('Annuity (€/m/year)')
     plt.title('Renewal Options: Lifetime vs Annuity')
     plt.grid(True)
