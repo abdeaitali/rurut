@@ -200,7 +200,7 @@ def plot_all_interpolated_tables(data, radius=1465):
             filtered_data = data[
                 (data['Condition'].str.strip().str.lower() == condition) &
                 (data['Rail'].str.strip().str.lower() == rail) &
-                (data['Radius'] == str(radius))
+                (data['Radius'].astype(str) == str(radius))
             ]
 
             if filtered_data.empty:
@@ -240,3 +240,52 @@ def plot_all_interpolated_tables(data, radius=1465):
             ax.set_xlabel('Months (since last grinding)', fontsize=10)
             ax.set_ylabel('Track gauge (mm)', fontsize=10)
     plt.show()
+
+
+def plot_specific_interpolated_tables(data, conditions, radius=1465, rail_types=['inner', 'high']):
+    """
+    Plots figures for specified conditions and rail types.
+
+    Args:
+        data (pd.DataFrame): The interpolated data to plot.
+        conditions (list): List of condition strings to plot (e.g., ['h-index', 'wear']).
+        radius (int): The radius to filter the data.
+        rail_types (list): List of rail types to plot (default: ['inner', 'high']).
+    """
+    n_rows = len(conditions)
+    n_cols = len(rail_types)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows), sharex=True, sharey=True)
+    if n_rows == 1:
+        axes = np.expand_dims(axes, axis=0)
+    if n_cols == 1:
+        axes = np.expand_dims(axes, axis=1)
+
+    for i, condition in enumerate(conditions):
+        for j, rail in enumerate(rail_types):
+            filtered_data = data[
+                (data['Condition'].str.strip().str.lower() == condition.strip().lower()) &
+                (data['Rail'].str.strip().str.lower() == rail.strip().lower()) &
+                (data['Radius'].astype(str) == str(radius))
+            ]
+            ax = axes[i, j]
+            if filtered_data.empty:
+                ax.set_visible(False)
+                continue
+
+            gauges = filtered_data['Gauge'].unique()
+            months_to_show = [1, 6, 9, 12]
+            filtered_data = filtered_data[filtered_data['Month'].isin(months_to_show)]
+            months = sorted(filtered_data['Month'].unique())
+
+            X, Y = np.meshgrid(months, gauges)
+            Z = filtered_data.pivot(index='Gauge', columns='Month', values='Value').reindex(index=gauges, columns=months).values
+
+            surf = ax.contourf(X, Y, Z, cmap='viridis', levels=20)
+            fig.colorbar(surf, ax=ax, orientation='vertical', shrink=0.8)
+            ax.set_title(f'{condition} - {rail.capitalize()}', fontsize=12)
+            ax.set_xlabel('Months (since last grinding)', fontsize=10)
+            ax.set_ylabel('Track gauge (mm)', fontsize=10)
+            ax.set_xticks(months_to_show)
+    plt.tight_layout()
+    plt.show()
+    
