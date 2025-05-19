@@ -74,7 +74,6 @@ from rail_analysis.constants import (
     POSS_NEW_RAIL,
     H_MAX,
     RAIL_RENEWAL_COST,
-    TRACK_RENEWAL_COST,
     TECH_LIFE_YEARS,
     MAX_MONTHS,
     SELECTED_GAUGE_WIDENING,
@@ -157,7 +156,7 @@ def get_annuity_refactored(
     grinding_freq, tamping_freq = maint_strategy
 
     accumulated_maintenance_costs = 0
-    accumulated_renewal_costs = TRACK_RENEWAL_COST
+    accumulated_renewal_costs = 0
     accumulated_cap_costs = 0
 
     H_curr = 0
@@ -218,7 +217,7 @@ def get_annuity_refactored(
 
     if track_results:
         return annuity, rail_lifetime, historical_data
-    return annuity, rail_lifetime
+    return annuity, rail_lifetime, None
 
 
 # === PLOTTING FUNCTIONS ===
