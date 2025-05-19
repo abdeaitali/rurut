@@ -143,9 +143,7 @@ def get_annuity(H_table, NW_table, maint_strategy, RCF_residual_table, RCF_depth
             accumulated_cap_costs += poss_grinding * cap_poss_per_hour / (1 + discount_rate) ** y
             H_curr += PchipInterpolator(Xq, H_table[H_table['Month'] == grinding_freq]['Value'])(gauge_curr) - delta_H
 
-            rcf_grinding = PchipInterpolator(Xq, RCF_residual_table[RCF_residual_table['Month'] == grinding_freq]['Value'])(gauge_curr)
-            if rcf_grinding > 0:
-                RCF_res_grinding += rcf_grinding
+            RCF_res_grinding += PchipInterpolator(Xq, RCF_residual_table[RCF_residual_table['Month'] == grinding_freq]['Value'])(gauge_curr)
             RCF_residual_curr = RCF_res_grinding
         else:
             RCF_residual_curr = RCF_res_grinding + PchipInterpolator(Xq, RCF_depth_table[RCF_depth_table['Month'] == latest_grinding_since]['Value'])(gauge_curr)

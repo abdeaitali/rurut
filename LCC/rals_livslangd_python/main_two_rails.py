@@ -73,8 +73,9 @@ def main():
     # Example usage of the get_lcc function
     grinding_freq_low = grinding_freq  # months
     grinding_freq_high = grinding_freq  # months
-    annuity, rail_lifetime = get_annuity_track_refactored(data_df_interpolated, grinding_freq_low, grinding_freq_high, tamping_freq)
+    annuity, rail_lifetime = get_annuity_track_refactored(data_df_interpolated, grinding_freq_low, grinding_freq_high, tamping_freq, verbose=True, plot_timeline=True)
     print(f"Total LCC: {annuity:.2f} SEK/m/year")
+    print(f"Rail lifetime: {rail_lifetime:.2f} years")
 
 if __name__ == "__main__":
     main()

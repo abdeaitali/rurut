@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 
 # === HELPER FUNCTIONS ===
 
-def calculate_grinding_costs(freq, since, gauge, H_curr, RCF_curr, Ht, NW, RRes, RDep, gauge_levels, t):
+def calculate_grinding_costs(freq, since, gauge, H_curr, rcf_r, Ht, NW, RRes, RDep, gauge_levels, t):
     """
     Calculate grinding costs and update H-index and RCF values for a rail.
     """
@@ -36,13 +36,11 @@ def calculate_grinding_costs(freq, since, gauge, H_curr, RCF_curr, Ht, NW, RRes,
 
         # Update H-index using H-index table (minus natural wear)
         ΔH_g = PchipInterpolator(gauge_levels, Ht[Ht['Month'] == freq]['Value'])(gauge)
-        H_curr += ΔH_g - ΔN
+        H_curr += ΔH_g - ΔN # Double check this with Jonathan!
 
         # Update RCF using RCF-residual
-        rcf_r = PchipInterpolator(gauge_levels, RRes[RRes['Month'] == freq]['Value'])(gauge)
-        if rcf_r > 0:
-            RCF_curr += rcf_r # check this !
-
+        rcf_r += PchipInterpolator(gauge_levels, RRes[RRes['Month'] == freq]['Value'])(gauge) # check this !
+        RCF_curr = rcf_r
         since = 0
     else:
         # Update H-index using natural wear
@@ -50,11 +48,11 @@ def calculate_grinding_costs(freq, since, gauge, H_curr, RCF_curr, Ht, NW, RRes,
 
         # Update RCF using RCF-depth
         ΔR = PchipInterpolator(gauge_levels, RDep[RDep['Month'] == since]['Value'])(gauge)
-        RCF_curr += ΔR
+        RCF_curr = rcf_r + ΔR
 
         grinding_cost = capacity_cost = 0
 
-    return grinding_cost, capacity_cost, H_curr, RCF_curr, since + 1
+    return grinding_cost, capacity_cost, H_curr, RCF_curr, rcf_r, since + 1
 
 
 def calculate_tamping_costs(since_tamp, gauge_freq, gauge, t):
@@ -72,7 +70,7 @@ def calculate_tamping_costs(since_tamp, gauge_freq, gauge, t):
     return tamping_cost, capacity_cost, gauge, since_tamp + 1
 
 
-def handle_double_grinding(since_attr, gauge, H_curr, RCF_curr, gauge_levels, t, Ht_H):
+def handle_double_grinding(since_attr, gauge, H_curr, RCF_curr, rcf_r, gauge_levels, t, Ht_H):
     """
     Handle double grinding if RCF exceeds the maximum threshold.
     """
@@ -88,11 +86,12 @@ def handle_double_grinding(since_attr, gauge, H_curr, RCF_curr, gauge_levels, t,
 
         # Reset RCF to zero and months since grinding
         RCF_curr = 0
+        rcf_r = 0
         since_attr = 1
     else:
         milling_cost = capacity_cost = 0
 
-    return milling_cost, capacity_cost, H_curr, RCF_curr, since_attr
+    return milling_cost, capacity_cost, H_curr, RCF_curr, rcf_r, since_attr
 
 
 def handle_rail_renewal(H_curr, RCF_curr, t):
@@ -119,7 +118,9 @@ def get_annuity_track_refactored(
     profile_high_rail=SELECTED_PROFILE,
     track_results=False,
     gauge_widening_per_year=SELECTED_GAUGE_WIDENING,
-    radius=SELECTED_RADIUS, track_life=TECH_LIFE_YEARS, plot_timeline=False
+    radius=SELECTED_RADIUS, track_life=TECH_LIFE_YEARS, 
+    plot_timeline=False,
+    verbose=False
 ):
     """
     Refactored version of get_annuity_track using helper functions.
@@ -155,6 +156,7 @@ def get_annuity_track_refactored(
 
     H_H = H_L = 0.0
     R_H = R_L = 0.0
+    R_r_H = R_r_L = 0.0
     lifetime_H = lifetime_L = -1
     gauge = gauge_levels[0]
 
@@ -175,25 +177,26 @@ def get_annuity_track_refactored(
             since = since_grind_H if rail == 'H' else since_grind_L
             H_curr = H_H if rail == 'H' else H_L
             RCF_curr = R_H if rail == 'H' else R_L
+            rcf_r = R_r_H if rail == 'H' else R_r_L
             Ht = Ht_H if rail == 'H' else Ht_L
             NW = NW_H if rail == 'H' else NW_L
             RRes = RCF_RES_H if rail == 'H' else RCF_RES_L
             RDep = RCF_DEP_H if rail == 'H' else RCF_DEP_L
 
-            grinding_cost, capacity_cost, H_curr, RCF_curr, since = calculate_grinding_costs(
-                rail, freq, since, gauge, H_curr, RCF_curr, Ht, NW, RRes, RDep, gauge_levels, t
+            grinding_cost, capacity_cost, H_curr, RCF_curr, rcf_r, since = calculate_grinding_costs(
+                freq, since, gauge, H_curr, rcf_r, Ht, NW, RRes, RDep, gauge_levels, t
             )
 
             if rail == 'H':
                 PV_maint_H += grinding_cost
                 PV_cap_H += capacity_cost
                 since_grind_H = since
-                H_H, R_H = H_curr, RCF_curr
+                H_H, R_H, R_r_H = H_curr, RCF_curr, rcf_r
             else:
                 PV_maint_L += grinding_cost
                 PV_cap_L += capacity_cost
                 since_grind_L = since
-                H_L, R_L = H_curr, RCF_curr
+                H_L, R_L, R_r_L = H_curr, RCF_curr, rcf_r
 
         # Tamping (shared)
         tamping_cost, capacity_cost, gauge, since_tamp = calculate_tamping_costs(since_tamp, gauge_freq, gauge, t)
@@ -206,19 +209,19 @@ def get_annuity_track_refactored(
             H_curr = H_H if rail == 'H' else H_L
             since = locals()[since_attr]
 
-            milling_cost, capacity_cost, H_curr, RCF_curr, since = handle_double_grinding(
-                rail, since, gauge, H_curr, RCF_curr, gauge_levels, t, Ht_H if rail == 'H' else Ht_L
+            milling_cost, capacity_cost, H_curr, RCF_curr, rcf_r, since = handle_double_grinding(
+                since, gauge, H_curr, RCF_curr, rcf_r, gauge_levels, t, Ht_H if rail == 'H' else Ht_L
             )
 
             if rail == 'H':
                 PV_maint_H += milling_cost
                 PV_cap_H += capacity_cost
-                H_H, R_H = H_curr, RCF_curr
+                H_H, R_H, R_r_H = H_curr, RCF_curr, rcf_r
                 since_grind_H = since
             else:
                 PV_maint_L += milling_cost
                 PV_cap_L += capacity_cost
-                H_L, R_L = H_curr, RCF_curr
+                H_L, R_L, R_r_L = H_curr, RCF_curr, rcf_r
                 since_grind_L = since
 
         # Rail renewal (costs separated)
@@ -262,11 +265,11 @@ def get_annuity_track_refactored(
                 if name == 'H':
                     PV_renew_H += material_cost 
                     PV_cap_H += cap_renewal_cost
-                    H_H, R_H = 0, 0
+                    H_H, R_H, R_r_H = 0, 0, 0
                 else:
                     PV_renew_L += material_cost
                     PV_cap_L += cap_renewal_cost
-                    H_L, R_L = 0, 0
+                    H_L, R_L, R_r_L = 0, 0, 0
 
         if track_results:
             history.append({
@@ -307,6 +310,8 @@ def get_annuity_track_refactored(
 
 
     optimal_option = min(renewal_options, key=lambda x: x["Annuity"])
+    if verbose:
+        print(f"Optimal option: {optimal_option['Option']} with annuity {optimal_option['Annuity']:.2f} €/m/year")
 
     if plot_timeline:
         plot_renewal_options(renewal_options)
