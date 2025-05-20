@@ -1,0 +1,9 @@
+﻿Asset;What;Quantity (in meter);Phase;CO2e (kg);Energy (GJ);Data source;Comments;
+Track;Track superstructure, single track ballast;1000;Construction Phase;467395,0042;4752,631525;"Klimatkalkyl; ASEK 8.0";Overall: LCA for single track UIC60 ;
+Track;Track superstructure, single track ballast;1000;Reinvestment / year;9347,900083;95,05263051;"Klimatkalkyl; ASEK 8.0";Emissions occuring in 2025, expressed in 2019 price level;Finns prisbana näst sista fliken
+Track;Track superstructure, single track ballast;1000;Operation & Maintenance / year;717,088628;141,2122633;"Klimatkalkyl; ASEK 8.0";;
+Rail;Rail 60E1;1000;Construction Phase;329888,5214;3040,216768;"Klimatkalkyl; ASEK 8.0";Verkar vara olika energikällor i byggnadsfasen. I huvudsak el men transporter till byggnadsplatsen kan ske med dieseldrivna fordon…;
+Rail;Rail 60E1;1000;Reinvestment / year;6597,770427;60,80433536;"Klimatkalkyl; ASEK 8.0";;
+All components;Total (Reinvestment per year);;;15945,67051;155,8569659;Klimatkalkyl;;
+All components;Total (O&M per year);;;717,088628;141,2122633;Klimatkalkyl;;
+All components;Adjusted total (excl. TGM production and transport);;;666,87297;10,19917369;Klimatkalkyl;;
