@@ -147,7 +147,8 @@ def get_table(df, condition, profile='MB4', gauge=None, load=32.5, rail=None, ra
     if rail is not None:
         filtered_data = filtered_data[filtered_data['Rail'].str.strip().str.lower() == rail.strip().lower()]
     if radius is not None:
-        filtered_data = filtered_data[filtered_data['Radius'].str.strip().str.lower() == radius.strip().lower()]
+        # Ensure radius is a string before comparison
+        filtered_data = filtered_data[filtered_data['Radius'].astype(str).str.strip().str.lower() == str(radius).strip().lower()]
     filtered_data = filtered_data[filtered_data['Load'] == load]
 
     if not filtered_data.empty:

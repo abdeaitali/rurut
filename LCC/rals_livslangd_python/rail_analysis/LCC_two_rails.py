@@ -151,9 +151,6 @@ def get_annuity_track_refactored(
     PV_tamping = 0.0
     PV_cap_tamping = 0.0
 
-    # Initial renewal cost for the whole track
-    #PV_renew_track = TRACK_RENEWAL_COST
-
     H_H = H_L = 0.0
     R_H = R_L = 0.0
     R_r_H = R_r_L = 0.0
@@ -303,29 +300,28 @@ def get_annuity_track_refactored(
 
     # to renewal options, add one column for annuity
     for option in renewal_options:
-        annuity_H = option["LCC_H"]/option["Horizon"]
-        annuity_L = option["LCC_L"]/option["Horizon"]
-        annuity_shared = option["LCC_shared"]/option["Horizon"]
-        option["Annuity"] = (annuity_H + annuity_L + annuity_shared)/TRACK_LENGTH_M
+        LCC_track_lifetime_H = (TECH_LIFE_YEARS/option["Lifetime_H"]-1)*option["LCC_H"]
+        LCC_track_lifetime_L = (TECH_LIFE_YEARS/option["Lifetime_L"]-1)*option["LCC_L"]
+        LCC_track_lifetime_shared =  (TECH_LIFE_YEARS/option["Horizon"]-1)*option["LCC_shared"]
+        option["LCC_track"] = (LCC_track_lifetime_H + LCC_track_lifetime_L + LCC_track_lifetime_shared)/TRACK_LENGTH_M
+        option["Annuity"] = option["LCC_track"] / TECH_LIFE_YEARS
 
 
-    optimal_option = min(renewal_options, key=lambda x: x["Annuity"])
-    if verbose:
-        print(f"Optimal option: {optimal_option['Option']} with annuity {optimal_option['Annuity']:.2f} €/m/year")
-
-    if plot_timeline:
-        plot_renewal_options(renewal_options)
-
-
+    optimal_option = min(renewal_options, key=lambda x: x["LCC_track"])
 
     annuity = optimal_option["Annuity"]
     lifetime = optimal_option["Horizon"]
 
+    if verbose:
+        print(f"Optimal option: {optimal_option['Option']} with annuity {annuity:.2f} SEK/m/year and lifetime {lifetime:.2f} years")
+
+    if plot_timeline:
+        plot_renewal_options(renewal_options)
 
     if track_results:
         return annuity, lifetime, history
     else:
-        return annuity, lifetime
+        return annuity, lifetime, None
 
 
 # === PLOTTING FUNCTIONS ===
@@ -345,7 +341,7 @@ def plot_renewal_options(renewal_options):
         plt.annotate(label, (lifetimes[i], annuities[i]), textcoords="offset points", xytext=(5, 5), ha='left', fontsize=9)
 
     plt.xlabel('Lifetime (months)')
-    plt.ylabel('Annuity (€/m/year)')
+    plt.ylabel('Annuity (SEK/m/year)')
     plt.title('Renewal Options: Lifetime vs Annuity')
     plt.grid(True)
     plt.legend()

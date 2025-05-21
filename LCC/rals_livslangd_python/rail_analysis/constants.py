@@ -31,7 +31,7 @@ POSS_TAMPING = 5
 POSS_GRINDING_TWICE = POSS_GRINDING * 5 / 3
 
 # cost of renewing the track, i.e., both rails and sleepers
-TRACK_RENEWAL_COST = 0# for comparing sum of single rails and both rails! 6500 * TRACK_LENGTH_M + get_LCA_renewal(TRACK_LENGTH_M, 'Track')
+TRACK_RENEWAL_COST = 6500 * TRACK_LENGTH_M + get_LCA_renewal(TRACK_LENGTH_M, 'Track')# for comparing sum of single rails and both rails! 6500 * TRACK_LENGTH_M + get_LCA_renewal(TRACK_LENGTH_M, 'Track')
 
 # cost of renewing a single rail
 RAIL_RENEWAL_COST = 1500 * TRACK_LENGTH_M + get_LCA_renewal(TRACK_LENGTH_M, 'Rail') 

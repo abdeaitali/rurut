@@ -29,6 +29,8 @@ def read_input_data(file_path):
         # Reshape the DataFrame so that months are in one column
         id_vars = ['Profile', 'Load', 'Condition', 'Gauge']
         if 'Radius' in data.columns:
+            # Enforce that Radius is string
+            data['Radius'] = data['Radius'].astype(str)
             id_vars.append('Radius')
         if 'Rail' in data.columns:
             id_vars.append('Rail')
