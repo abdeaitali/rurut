@@ -8,7 +8,7 @@ EF_DIESEL = 0.063583815
 DEFAULT_SHARE_EL = 0.8  # 80% electricity
 DEFAULT_CIRCULARITY_COEF = 0.0  # 0% circularity
 
-def get_LCA_renewal(asset_type, year, circularity_coef=DEFAULT_CIRCULARITY_COEF, share_electricity=DEFAULT_SHARE_EL):
+def get_LCA_renewal(asset_type, year, track_length=100, circularity_coef=DEFAULT_CIRCULARITY_COEF, share_electricity=DEFAULT_SHARE_EL):
 
    # Read LCA-data och CO2e-valuation
    # absolute path
@@ -42,7 +42,6 @@ def get_LCA_renewal(asset_type, year, circularity_coef=DEFAULT_CIRCULARITY_COEF,
    total_co2_per_m = co2_emission + energy_co2  # kg/m
 
    #total cost 
-   TRACK_LENGTH_M = 100  # default track length
-   total_cost = total_co2_per_m * co2_price * TRACK_LENGTH_M  # SEK
+   total_cost = total_co2_per_m * co2_price * track_length  # SEK
 
    return total_cost*(1-circularity_coef)  # SEK
