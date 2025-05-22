@@ -1,5 +1,6 @@
 from scipy.interpolate import PchipInterpolator  # type: ignore
 from rail_analysis.rail_measures import get_table
+
 from rail_analysis.constants import (
     H_MAX,
     RAIL_RENEWAL_COST,
@@ -29,17 +30,17 @@ def calculate_grinding_costs(freq, since, gauge, H_curr, rcf_r, Ht, NW, RRes, RD
     """
     ΔN = PchipInterpolator(gauge_levels, NW[NW['Month'] == since]['Value'])(gauge)
 
-    if since == freq:
+    if since == freq: # when grinding is scheduled
         # Add grinding cost including capacity cost
         grinding_cost = (GRINDING_COST_PER_M * TRACK_LENGTH_M) / (1 + DISCOUNT_RATE) ** t
         capacity_cost = (POSS_GRINDING * CAP_POSS_PER_HOUR) / (1 + DISCOUNT_RATE) ** t
 
         # Update H-index using H-index table (minus natural wear)
         ΔH_g = PchipInterpolator(gauge_levels, Ht[Ht['Month'] == freq]['Value'])(gauge)
-        H_curr += ΔH_g - ΔN # Double check this with Jonathan!
+        H_curr += ΔH_g - ΔN
 
         # Update RCF using RCF-residual
-        rcf_r += PchipInterpolator(gauge_levels, RRes[RRes['Month'] == freq]['Value'])(gauge) # check this !
+        rcf_r += PchipInterpolator(gauge_levels, RRes[RRes['Month'] == freq]['Value'])(gauge)
         RCF_curr = rcf_r
         since = 0
     else:
@@ -118,7 +119,8 @@ def get_annuity_track_refactored(
     profile_high_rail=SELECTED_PROFILE,
     track_results=False,
     gauge_widening_per_year=SELECTED_GAUGE_WIDENING,
-    radius=SELECTED_RADIUS, track_life=TECH_LIFE_YEARS, 
+    radius=SELECTED_RADIUS, 
+    track_life=TECH_LIFE_YEARS, 
     plot_timeline=False,
     verbose=False
 ):
@@ -168,6 +170,13 @@ def get_annuity_track_refactored(
         t = m / 12
         gauge += gauge_widening_per_year / 12
 
+        # Track if both rails are ground in the same month to share capacity cost
+        grinding_month_H = grinding_month_L = False
+        grinding_costs = {'H': 0, 'L': 0}
+        capacity_costs = {'H': 0, 'L': 0}
+        states = {}
+
+
         # Grinding for each rail (costs separated)
         for rail in ('H', 'L'):
             freq = grinding_freq_high if rail == 'H' else grinding_freq_low
@@ -181,19 +190,35 @@ def get_annuity_track_refactored(
             RDep = RCF_DEP_H if rail == 'H' else RCF_DEP_L
 
             grinding_cost, capacity_cost, H_curr, RCF_curr, rcf_r, since = calculate_grinding_costs(
-                freq, since, gauge, H_curr, rcf_r, Ht, NW, RRes, RDep, gauge_levels, t
+            freq, since, gauge, H_curr, rcf_r, Ht, NW, RRes, RDep, gauge_levels, t
             )
 
-            if rail == 'H':
-                PV_maint_H += grinding_cost
-                PV_cap_H += capacity_cost
-                since_grind_H = since
-                H_H, R_H, R_r_H = H_curr, RCF_curr, rcf_r
-            else:
-                PV_maint_L += grinding_cost
-                PV_cap_L += capacity_cost
-                since_grind_L = since
-                H_L, R_L, R_r_L = H_curr, RCF_curr, rcf_r
+            grinding_costs[rail] = grinding_cost
+            capacity_costs[rail] = capacity_cost
+            states[rail] = (H_curr, RCF_curr, rcf_r, since)
+
+            if grinding_cost > 0:
+                if rail == 'H':
+                    grinding_month_H = True
+                else:
+                    grinding_month_L = True
+
+        # If both rails are ground in the same month, share the capacity cost
+        if grinding_month_H and grinding_month_L:
+            shared_capacity_cost = capacity_costs['H']  # Both are equal
+            capacity_costs['H'] = shared_capacity_cost / 2
+            capacity_costs['L'] = shared_capacity_cost / 2
+
+        # Assign costs and states back
+        PV_maint_H += grinding_costs['H']
+        PV_cap_H += capacity_costs['H']
+        since_grind_H = states['H'][3]
+        H_H, R_H, R_r_H = states['H'][0], states['H'][1], states['H'][2]
+
+        PV_maint_L += grinding_costs['L']
+        PV_cap_L += capacity_costs['L']
+        since_grind_L = states['L'][3]
+        H_L, R_L, R_r_L = states['L'][0], states['L'][1], states['L'][2]
 
         # Tamping (shared)
         tamping_cost, capacity_cost, gauge, since_tamp = calculate_tamping_costs(since_tamp, gauge_freq, gauge, t)
@@ -235,8 +260,8 @@ def get_annuity_track_refactored(
                 renewal_options.append({
                     "Option": "Renew both @" + name,
                     "Rail": name,
-                    "Lifetime_H": t,
-                    "Lifetime_L": t,
+                    "Lifetime_H": lifetime_H if name == 'H' else t,
+                    "Lifetime_L": lifetime_L if name == 'L' else t,
                     "Horizon": t,
                     "LCC_H": lcc_H,
                     "LCC_L": lcc_L,
@@ -300,14 +325,14 @@ def get_annuity_track_refactored(
 
     # to renewal options, add one column for annuity
     for option in renewal_options:
-        LCC_track_lifetime_H = (TECH_LIFE_YEARS/option["Lifetime_H"]-1)*option["LCC_H"]
-        LCC_track_lifetime_L = (TECH_LIFE_YEARS/option["Lifetime_L"]-1)*option["LCC_L"]
-        LCC_track_lifetime_shared =  (TECH_LIFE_YEARS/option["Horizon"]-1)*option["LCC_shared"]
-        option["LCC_track"] = (LCC_track_lifetime_H + LCC_track_lifetime_L + LCC_track_lifetime_shared)/TRACK_LENGTH_M
-        option["Annuity"] = option["LCC_track"] / TECH_LIFE_YEARS
+        LCC_track_lifetime_H = (option["LCC_H"]/option["Horizon"])
+        LCC_track_lifetime_L = (option["LCC_L"]/option["Horizon"])
+        LCC_track_lifetime_shared =  option["LCC_shared"]/option["Horizon"]
+        option["Annuity"] = (LCC_track_lifetime_H + LCC_track_lifetime_L + LCC_track_lifetime_shared)/TRACK_LENGTH_M
+        option["LCC_track"] = option["Annuity"] * TECH_LIFE_YEARS
 
 
-    optimal_option = min(renewal_options, key=lambda x: x["LCC_track"])
+    optimal_option = min(renewal_options, key=lambda x: x["Annuity"])
 
     annuity = optimal_option["Annuity"]
     lifetime = optimal_option["Horizon"]
@@ -352,45 +377,65 @@ def plot_renewal_options(renewal_options):
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from collections import OrderedDict
+from rail_analysis.constants import H_MAX, RCF_MAX
 
 def plot_historical_data_two_rails(history):
     """
-    Plots the historical data for H_H, RCF_H, H_L, RCF_L, and Gauge over time
+    Plots the historical data for H-index, RCF, and Gauge over time for both rails
     using the history returned by get_annuity_track_refactored.
 
     Parameters:
-    - history: List of dicts with keys 'Month', 'H_H', 'RCF_H', 'H_L', 'RCF_L', 'Gauge'
+      - history: List of dicts with keys 'Month', 'H_H', 'RCF_H', 'H_L', 'RCF_L', 'Gauge'
     """
+    # Convert history to DataFrame
     df = pd.DataFrame(history)
-    fig_size = (10, 4)
+    fig_size = (12, 4)
+    font_size = 13
 
-    # Plot H-index for both rails
-    plt.figure(figsize=fig_size)
-    sns.lineplot(data=df, x='Month', y='H_H', marker='o', label='High Rail H')
-    sns.lineplot(data=df, x='Month', y='H_L', marker='o', label='Low Rail H')
-    plt.title('Historical H-index (H) for Both Rails')
-    plt.xlabel('Month')
-    plt.ylabel('H-index')
-    plt.legend()
-    plt.grid()
+    # Create a figure with two subplots for H-index and RCF
+    fig, axes = plt.subplots(2, 1, figsize=(fig_size[0], fig_size[1]*2), sharex=True)
+
+    # Plot H-index for both rails (upper subplot)
+    sns.lineplot(data=df, x='Month', y='H_H', marker='o', label='High rail', ax=axes[0])
+    sns.lineplot(data=df, x='Month', y='H_L', marker='o', label='Low rail', ax=axes[0])
+    axes[0].axhline(H_MAX, color='red', linestyle='--', label='H-index Max (14 mm)')
+    axes[0].set_title('H-index values over the lifetime of the high & low rail', fontsize=font_size+2)
+    axes[0].set_ylabel('H-index (mm)', fontsize=font_size)
+    axes[0].grid(True)
+    axes[0].tick_params(axis='both', labelsize=font_size)
+
+    # Plot RCF for both rails (lower subplot)
+    sns.lineplot(data=df, x='Month', y='RCF_H', marker='o', label='High rail', ax=axes[1])
+    sns.lineplot(data=df, x='Month', y='RCF_L', marker='o', label='Low rail', ax=axes[1])
+    axes[1].axhline(RCF_MAX, color='red', linestyle='--', label='RCF_MAX (0.5 mm)')
+    axes[1].set_title('RCF value over the lifetime of the high & low rail', fontsize=font_size+2)
+    axes[1].set_xlabel('Month', fontsize=font_size)
+    axes[1].set_ylabel('RCF (mm)', fontsize=font_size)
+    axes[1].grid(True)
+    axes[1].tick_params(axis='both', labelsize=font_size)
+
+    # Combine legends from both subplots into a single legend above the subplots
+    handles, labels = [], []
+    for ax in axes:
+        h, l = ax.get_legend_handles_labels()
+        handles += h
+        labels += l
+        if ax.get_legend():
+            ax.legend_.remove()
+    by_label = OrderedDict(zip(labels, handles))
+    fig.legend(by_label.values(), by_label.keys(), loc='upper center', ncol=4, bbox_to_anchor=(0.5, 1.02), fontsize=font_size)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
     plt.show()
 
-    # Plot RCF for both rails
+    # Plot Gauge on a separate figure
     plt.figure(figsize=fig_size)
-    sns.lineplot(data=df, x='Month', y='RCF_H', marker='o', label='High Rail RCF')
-    sns.lineplot(data=df, x='Month', y='RCF_L', marker='o', label='Low Rail RCF')
-    plt.title('Historical RCF for Both Rails')
-    plt.xlabel('Month')
-    plt.ylabel('RCF')
-    plt.legend()
-    plt.grid()
-    plt.show()
-
-    # Plot Gauge
-    plt.figure(figsize=fig_size)
-    sns.lineplot(data=df, x='Month', y='Gauge', marker='o')
-    plt.title('Historical Gauge')
-    plt.xlabel('Month')
-    plt.ylabel('Gauge')
-    plt.grid()
+    sns.lineplot(data=df, x='Month', y='Gauge', marker='o', label='Gauge')
+    plt.title('Historical Track Gauge', fontsize=font_size+2)
+    plt.xlabel('Month', fontsize=font_size)
+    plt.ylabel('Gauge (mm)', fontsize=font_size)
+    plt.legend(fontsize=font_size)
+    plt.grid(True)
+    plt.tight_layout()
     plt.show()

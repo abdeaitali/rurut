@@ -2,28 +2,24 @@ from rail_analysis.LCC_two_rails import get_annuity_track_refactored, plot_histo
 from rail_analysis.LCC_single_rail import get_annuity_refactored, plot_historical_data_both_rails
 from rail_analysis.constants import (
     TECH_LIFE_YEARS, 
-    TRACK_RENEWAL_COST,
-    TRACK_LENGTH_M     
+    TRACK_RENEWAL_COST, 
+    TRACK_LENGTH_M
 )
 
 import pandas as pd
-import numpy as np
 
-def optimise_and_compare(
+def run_joint_optimisation(
     data_df,
     grinding_freq_low,
     grinding_freq_high,
-    gauge_freq,
-    maint_strategy_single=None,
+    gauge_freq=48,
     profile_low_rail='MB4',
     profile_high_rail='MB4',
     track_results=False,
     gauge_widening_per_year=1,
     radius='1465',
-    track_life=TECH_LIFE_YEARS,
-    bar_chart=False
+    track_life=TECH_LIFE_YEARS
 ):
-    # --- Joint (two-rail) optimisation ---
     ann_joint, life_joint, hist_joint = get_annuity_track_refactored(
         data_df,
         grinding_freq_low,
@@ -36,13 +32,21 @@ def optimise_and_compare(
         radius=radius,
         track_life=track_life
     )
+    return ann_joint, life_joint, hist_joint
 
-    # --- Separate (single-rail) optimisation ---
-    if maint_strategy_single is None:
-        maint_strategy_single = (grinding_freq_low, gauge_freq)
+def run_separate_optimisation(
+    data_df,
+    grinding_freq,
+    gauge_freq=48,
+    profile_rail='MB4',
+    track_results=False,
+    gauge_widening_per_year=1,
+    radius='1465'
+):
+    maint_strategy = (grinding_freq, gauge_freq)
     ann_H, life_H, hist_H = get_annuity_refactored(
         data_df,
-        maint_strategy_single,
+        maint_strategy,
         high_or_low_rail='High',
         track_results=track_results,
         gauge_widening_per_year=gauge_widening_per_year,
@@ -50,110 +54,89 @@ def optimise_and_compare(
     )
     ann_L, life_L, hist_L = get_annuity_refactored(
         data_df,
-        maint_strategy_single,
+        maint_strategy,
         high_or_low_rail='Inner',
         track_results=track_results,
         gauge_widening_per_year=gauge_widening_per_year,
         radius=radius
     )
+    return ann_H, life_H, hist_H, ann_L, life_L, hist_L
 
-    # --- Plot the history of the rail using the functions plot_historical_data_two_rails ---
-    if track_results:
-        plot_historical_data_two_rails(hist_joint)
-        plot_historical_data_both_rails(hist_L, hist_H)
-
-
-    # --- Use the technical lifetime for fair comparison ---
-    comparison_lifetime = TECH_LIFE_YEARS
-
-    total_LCC_joint = ann_joint * comparison_lifetime + TRACK_RENEWAL_COST/TRACK_LENGTH_M    # per meter
-    total_LCC_H = ann_H * comparison_lifetime        # per meter
-    total_LCC_L = ann_L * comparison_lifetime       # per meter
-    total_LCC_sum = total_LCC_H + total_LCC_L + TRACK_RENEWAL_COST/TRACK_LENGTH_M          # per meter
-
-    # --- Comparison summary ---
-    summary = pd.DataFrame({
-        'Approach': [
-            'Joint (two-rail)',
-            'Separate (High)',
-            'Separate (Low)',
-            'Separate (Sum H+L)'
-        ],
-        'Annuity [SEK/m/year]': [ann_joint, ann_H, ann_L, None],
-        'Lifetime [years]': [life_joint, life_H, life_L, None],
-        f'Total LCC over {comparison_lifetime:.1f} years [SEK/m]': [
-            total_LCC_joint, total_LCC_H, total_LCC_L, total_LCC_sum
-        ]
-    })
-    print(summary)
-    # print also the percentage of savings in total LCC when joingt (two-rail) approach instead of separate (high+low)
-    savings_percentage = (total_LCC_sum - total_LCC_joint) / total_LCC_sum * 100
-    print(f"Savings in total LCC when using joint (two-rail) approach instead of separate (high+low): {savings_percentage:.2f}%")
-
-    # If bar_chart is True: plot the results as bar charts
-    if bar_chart:
-        plot_comparison_figures(
-            ann_joint, ann_H, ann_L,
-            life_joint, life_H, life_L,
-            total_LCC_joint, total_LCC_H, total_LCC_L,
-            comparison_lifetime
+def compare_joint_vs_separate(
+    data_df,
+    grinding_freqs,
+    gauge_freq=48,
+    profile_low_rail='MB4',
+    profile_high_rail='MB4',
+    track_results=False,
+    gauge_widening_per_year=1,
+    radius='1465',
+    track_life=TECH_LIFE_YEARS,
+    bar_chart=False
+):
+    results = []
+    for freq in grinding_freqs:
+        # Joint
+        ann_joint, life_joint, _ = run_joint_optimisation(
+            data_df, freq, freq, gauge_freq,
+            profile_low_rail, profile_high_rail,
+            track_results, gauge_widening_per_year, radius, track_life
         )
+        # Separate
+        ann_H, life_H, _, ann_L, life_L, _ = run_separate_optimisation(
+            data_df, freq, gauge_freq, profile_low_rail, track_results, gauge_widening_per_year, radius
+        )
+        # LCC over technical lifetime
+        total_LCC_joint = ann_joint * TECH_LIFE_YEARS + TRACK_RENEWAL_COST / TRACK_LENGTH_M
+        total_LCC_H = ann_H * TECH_LIFE_YEARS
+        total_LCC_L = ann_L * TECH_LIFE_YEARS
+        total_LCC_sum = total_LCC_H + total_LCC_L + TRACK_RENEWAL_COST / TRACK_LENGTH_M
+        results.append({
+            'GrindingFreq': freq,
+            'Annuity_Joint': ann_joint,
+            'Lifetime_Joint': life_joint,
+            'TotalLCC_Joint': total_LCC_joint,
+            'Annuity_High': ann_H,
+            'Lifetime_High': life_H,
+            'TotalLCC_High': total_LCC_H,
+            'Annuity_Low': ann_L,
+            'Lifetime_Low': life_L,
+            'TotalLCC_Low': total_LCC_L,
+            'TotalLCC_Sum': total_LCC_sum
+        })
+    df = pd.DataFrame(results)
+    print(df)
+    if bar_chart:
+        plot_comparison_grid(df)
+    return df
 
+def plot_comparison_grid(df):
+    import matplotlib.pyplot as plt
+    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+    x = df['GrindingFreq']
 
-    
-    return {
-        'joint': {'annuity': ann_joint, 'lifetime': life_joint, 'history': hist_joint, 'total_LCC': total_LCC_joint},
-        'high': {'annuity': ann_H, 'lifetime': life_H, 'history': hist_H, 'total_LCC': total_LCC_H},
-        'low': {'annuity': ann_L, 'lifetime': life_L, 'history': hist_L, 'total_LCC': total_LCC_L},
-        'sum': {'total_LCC': total_LCC_sum},
-        'summary': summary
-    }
+    axs[0].plot(x, df['Annuity_Joint'], label='Joint', marker='o')
+    axs[0].plot(x, df['Annuity_High'], label='Separate High', marker='x')
+    axs[0].plot(x, df['Annuity_Low'], label='Separate Low', marker='s')
+    axs[0].set_title('Annuity [SEK/m/year]')
+    axs[0].set_xlabel('Grinding Frequency (months)')
+    axs[0].legend()
+    axs[0].grid()
 
-def plot_comparison_figures(
-        ann_joint, ann_H, ann_L,
-        life_joint, life_H, life_L,
-        total_LCC_joint, total_LCC_H, total_LCC_L,
-        comparison_lifetime
-        ):
-        import matplotlib.pyplot as plt
-        # Convert costs to thousand SEK
-        annuities = [ann_joint / 1000, ann_H / 1000, ann_L / 1000]
-        total_LCC_joint_thousand = total_LCC_joint / 1000
-        total_LCC_H_thousand = total_LCC_H / 1000
-        total_LCC_L_thousand = total_LCC_L / 1000
+    axs[1].plot(x, df['Lifetime_Joint'], label='Joint', marker='o')
+    axs[1].plot(x, df['Lifetime_High'], label='Separate High', marker='x')
+    axs[1].plot(x, df['Lifetime_Low'], label='Separate Low', marker='s')
+    axs[1].set_title('Lifetime [years]')
+    axs[1].set_xlabel('Grinding Frequency (months)')
+    axs[1].legend()
+    axs[1].grid()
 
-        approaches = ['Joint (two-rail)', 'Separate (High)', 'Separate (Low)']
-        lifetimes = [life_joint, life_H, life_L]
+    axs[2].plot(x, df['TotalLCC_Joint'], label='Joint', marker='o')
+    axs[2].plot(x, df['TotalLCC_Sum'], label='Separate (Sum H+L)', marker='s')
+    axs[2].set_title(f'Total LCC over {TECH_LIFE_YEARS} years [SEK/m]')
+    axs[2].set_xlabel('Grinding Frequency (months)')
+    axs[2].legend()
+    axs[2].grid()
 
-        bar_width = 0.35  # Slightly wider bars to reduce distance
-
-        # --- Create figure with 3 subplots ---
-        fig, axs = plt.subplots(1, 3, figsize=(10, 5))
-
-        # 1. Annuity bar chart
-        axs[0].bar(approaches, annuities, color=['black', 'dimgray', 'lightgray'], width=bar_width)
-        axs[0].set_ylabel('Annuity [kSEK/m/year]')
-        axs[0].set_title('Annuity Comparison')
-        axs[0].set_xticks(np.arange(len(approaches)))
-        axs[0].set_xticklabels(approaches, rotation=15)
-
-        # 2. Lifetime bar chart
-        axs[1].bar(approaches, lifetimes, color=['black', 'dimgray', 'lightgray'], width=bar_width)
-        axs[1].set_ylabel('Lifetime [years]')
-        axs[1].set_title('Lifetime Comparison')
-        axs[1].set_xticks(np.arange(len(approaches)))
-        axs[1].set_xticklabels(approaches, rotation=15)
-
-        # 3. Total LCC bar chart (joint vs separate stacked)
-        approaches_lcc = ['Joint (two-rail)', 'Separate (High+Low)']
-        axs[2].bar(approaches_lcc[0], total_LCC_joint_thousand, color='black', label='Joint (two-rail)', width=bar_width)
-        axs[2].bar(approaches_lcc[1], total_LCC_H_thousand, color='dimgray', label='Separate (High)', width=bar_width)
-        axs[2].bar(approaches_lcc[1], total_LCC_L_thousand, bottom=total_LCC_H_thousand, color='lightgray', label='Separate (Low)', width=bar_width)
-        axs[2].set_ylabel(f'Total LCC over {comparison_lifetime:.1f} years [kSEK/m]')
-        axs[2].set_title('Total LCC Comparison')
-        axs[2].set_xticks(np.arange(len(approaches_lcc)))
-        axs[2].set_xticklabels(approaches_lcc, rotation=15)
-
-        plt.tight_layout()
-        plt.subplots_adjust(bottom=0.22)  # Make space for legend
-        plt.show()
+    plt.tight_layout()
+    plt.show()

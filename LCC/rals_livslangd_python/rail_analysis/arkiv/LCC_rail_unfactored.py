@@ -40,7 +40,16 @@ import seaborn as sns # type: ignore
 from scipy.interpolate import PchipInterpolator # type: ignore
 
 from rail_analysis.rail_measures import get_table, get_h_index, get_wear_data, get_rcf_residual, get_rcf_depth
-from rail_analysis.LCA import get_LCA_renewal
+from rail_analysis.LCA_simple import get_LCA_renewal_simple as get_LCA_renewal
+
+
+
+from rail_analysis.constants import (
+    POSS_NEW_RAIL,
+    CAP_POSS_PER_HOUR,
+    RAIL_RENEWAL_COST
+)
+
 
 # === GLOBAL PARAMETERS ===
 SELECTED_PROFILE = 'MB4'  
@@ -49,15 +58,12 @@ SELECTED_RADIUS = '1465'
 
 DISCOUNT_RATE = 0.04
 TRACK_LENGTH_M = 1000
-TECH_LIFE_YEARS = 15
+TECH_LIFE_YEARS = 30
 MAX_MONTHS = 12 * TECH_LIFE_YEARS
 
 CAP_POSS_PER_HOUR = 50293
 TAMPING_COST_PER_M = 40
 GRINDING_COST_PER_M = 50
-
-TRACK_RENEWAL_COST = 6500 * TRACK_LENGTH_M
-RAIL_RENEWAL_COST = 1500 * TRACK_LENGTH_M
 
 POSS_GRINDING = 2
 POSS_TAMPING = 5
@@ -96,9 +102,6 @@ def get_annuity(H_table, NW_table, maint_strategy, RCF_residual_table, RCF_depth
     tamping_cost_per_meter = 40  # SEK/m
     grinding_cost_per_meter = 50  # SEK/m
 
-    track_renewal_costs = 6500 * track_length_meter + get_LCA_renewal(track_length_meter, 'Track')
-    rail_renewal_cost = 1500 * track_length_meter
-
     poss_grinding = 2  # hours
     poss_tamping = 5  # hours
     poss_grinding_twice = poss_grinding * 5 / 3
@@ -113,7 +116,6 @@ def get_annuity(H_table, NW_table, maint_strategy, RCF_residual_table, RCF_depth
     grinding_freq, tamping_freq = maint_strategy
 
     accumulated_maintenance_costs = 0
-    accumulated_renewal_costs = track_renewal_costs
     accumulated_cap_costs = 0
 
     H_curr = 0
@@ -179,8 +181,6 @@ def get_annuity(H_table, NW_table, maint_strategy, RCF_residual_table, RCF_depth
 
         if H_curr > H_max:
             rail_lifetime = y
-            accumulated_renewal_costs = accumulated_renewal_costs + (rail_renewal_cost+ get_LCA_renewal(track_length_meter, 'Rail')) / (1 + discount_rate) ** y
-            # accumulated_renewal_costs = accumulated_renewal_costs + (rail_renewal_cost) / (1 + discount_rate) ** y
             break
 
         if track_results:
@@ -191,7 +191,8 @@ def get_annuity(H_table, NW_table, maint_strategy, RCF_residual_table, RCF_depth
                 'Gauge_curr': gauge_curr
             })
 
-    annuity = (accumulated_cap_costs + accumulated_maintenance_costs + accumulated_renewal_costs) / track_length_meter / rail_lifetime
+    renewal_cost = (RAIL_RENEWAL_COST + POSS_NEW_RAIL*CAP_POSS_PER_HOUR) / (1 + discount_rate) ** y 
+    annuity = (accumulated_cap_costs + accumulated_maintenance_costs + renewal_cost) / track_length_meter / rail_lifetime
 
     if track_results:
         return annuity, rail_lifetime, historical_data
@@ -213,7 +214,7 @@ def plot_annuity_and_lifetime_with_tamping(tamping_frequency, data_df, rail_prof
 
 
     # Define grinding frequencies
-    grinding_frequencies = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    grinding_frequencies = list(range(1, 13))  # 1 to 12 months
 
     # Initialize lists to store results
     annuity_values = []

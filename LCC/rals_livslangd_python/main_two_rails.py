@@ -11,8 +11,7 @@ import os
 
 from preprocessings.read_input_data import read_input_data
 
-from rail_analysis.interpolation import interpolate_rail_data
-from rail_analysis.interpolation import plot_all_interpolated_tables
+from rail_analysis.interpolation import interpolate_rail_data, plot_all_interpolated_tables, plot_specific_interpolated_tables
 
 from rail_analysis.LCC_single_rail import get_annuity_refactored
 from rail_analysis.LCC_two_rails import get_annuity_track_refactored
@@ -28,7 +27,10 @@ SELECTED_RAIL = 'high'
 
 def main():
     # Load input data
-    file_path = './LCC/rals_livslangd_python/data/raw/CM2025/BDL_111_results_JL_0515.csv'
+    file_path = './LCC/rals_livslangd_python/data/raw/CM2025/BDL_111_results_JL_R495.csv'
+    #file_path = './LCC/rals_livslangd_python/data/raw/CM2025/BDL_111_results_JL_R1465.csv'
+    #file_path = './LCC/rals_livslangd_python/data/raw/CM2025/BDL_111_results_JL_0512_2rcfs.csv'
+
     try:
         # print the current working directory
         #print("Current working directory:", os.getcwd())
@@ -43,25 +45,27 @@ def main():
     data_df_interpolated = interpolate_rail_data(data_df) 
 
     # plot the interpolated data
-    #plot_all_interpolated_tables(data_df_interpolated) 
+#    plot_all_interpolated_tables(data_df_interpolated) 
+    #plot_specific_interpolated_tables(data_df_interpolated, conditions=['h-index', 'wear', 'rcf-depth'])
 
     # Example usage of the function
-    grinding_freq = 12  # months
-    tamping_freq = 10  # months
-    maint_strategy = (grinding_freq, tamping_freq)
-
+    tamping_freq = 48  # months
+    grinding_freq_low = 6  # months
+    grinding_freq_high = 5  # months
 
 
     # print that we are checking the resulting annuity and lifetime for low and high rail (using get_annuity_refactored)
     print("Checking the resulting annuity and lifetime for low and high rail...")
     # Perform LCC calculation using original function for low/inner rail
-    annuity_low, lifetime_low = get_annuity_refactored(
+    maint_strategy = (grinding_freq_low, tamping_freq)
+    annuity_low, lifetime_low, _ = get_annuity_refactored(
         data_df_interpolated,
         maint_strategy,
         high_or_low_rail = 'inner'
     )
     # Perform LCC calculation using original function for high rail
-    annuity_high, lifetime_high = get_annuity_refactored(
+    maint_strategy = (grinding_freq_high, tamping_freq)
+    annuity_high, lifetime_high, _ = get_annuity_refactored(
         data_df_interpolated,
         maint_strategy,
         high_or_low_rail = 'high'
@@ -69,13 +73,21 @@ def main():
     print(f"Low rail: annuity = {annuity_low}, lifetime = {lifetime_low}")
     print(f"High rail: annuity = {annuity_high}, lifetime = {lifetime_high}")
 
-
-    # Example usage of the get_lcc function
-    grinding_freq_low = grinding_freq  # months
-    grinding_freq_high = grinding_freq  # months
-    annuity, rail_lifetime = get_annuity_track_refactored(data_df_interpolated, grinding_freq_low, grinding_freq_high, tamping_freq, verbose=True, plot_timeline=True)
+    annuity, rail_lifetime, _ = get_annuity_track_refactored(data_df_interpolated, grinding_freq_low, grinding_freq_high, tamping_freq, verbose=True, plot_timeline=False)
     print(f"Total LCC: {annuity:.2f} SEK/m/year")
     print(f"Rail lifetime: {rail_lifetime:.2f} years")
+
+
+    # from rail_analysis.LCC_optimisation import optimise_and_compare
+
+    # _ = optimise_and_compare(
+    # data_df,
+    # grinding_freq_low=10,
+    # grinding_freq_high=10,
+    # gauge_freq=48,
+    # track_results=False,
+    # bar_chart=True
+    # )
 
 if __name__ == "__main__":
     main()

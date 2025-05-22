@@ -1,8 +1,4 @@
-from preprocessings.read_input_data import read_input_data
-from LCC.rals_livslangd_python.rail_analysis.LCC_single_rail import get_annuity
-from rail_analysis.rail_measures import get_h_index, get_wear_data, get_rcf_residual, get_rcf_depth
 
-import pandas as pd # type: ignore
 
 """
 Main script for the LCC Calculation
@@ -19,6 +15,12 @@ from LCC.rals_livslangd_python.rail_analysis.LCC_two_rails import get_annuity_tr
 
 from rail_analysis.interpolation import interpolate_rail_data
 from rail_analysis.interpolation import plot_all_interpolated_tables
+
+from rail_analysis.LCC_two_rails import get_annuity_track_refactored, plot_historical_data_two_rails
+
+from preprocessings.read_input_data import read_input_data
+
+import pandas as pd # type: ignore
 
 def main():
     # Load input data
@@ -59,7 +61,7 @@ def main():
 
 
     # plot the history of the results
-    plot_historical_data(history)
+    plot_historical_data_two_rails(history)
 
 if __name__ == "__main__":
     main()

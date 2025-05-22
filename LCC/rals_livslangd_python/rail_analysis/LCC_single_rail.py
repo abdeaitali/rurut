@@ -59,6 +59,7 @@ import seaborn as sns # type: ignore
 from scipy.interpolate import PchipInterpolator # type: ignore
 
 from rail_analysis.rail_measures import get_table
+from collections import OrderedDict
 
 from rail_analysis.constants import (
     GRINDING_COST_PER_M,
@@ -79,6 +80,8 @@ from rail_analysis.constants import (
     SELECTED_GAUGE_WIDENING,
     SELECTED_RADIUS,
     SELECTED_PROFILE,
+    RCF_MAX,
+    TRACK_RENEWAL_COST
 )
 
 # === HELPER FUNCTIONS ===
@@ -233,7 +236,7 @@ def plot_annuity_and_lifetime_with_tamping(tamping_frequency, data_df, high_or_l
 
 
     # Define grinding frequencies
-    grinding_frequencies = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    grinding_frequencies = list(range(1, 13))
 
     # Initialize lists to store results
     annuity_values = []
@@ -243,7 +246,7 @@ def plot_annuity_and_lifetime_with_tamping(tamping_frequency, data_df, high_or_l
     # Calculate annuity and lifetime for each grinding frequency
     for grinding_freq in grinding_frequencies:
         maint_strategy = (grinding_freq, tamping_frequency)
-        annuity, rail_lifetime = get_annuity_refactored(
+        annuity, rail_lifetime, _ = get_annuity_refactored(
             data_df,
             maint_strategy,
             high_or_low_rail=high_or_low_rail,
@@ -253,24 +256,28 @@ def plot_annuity_and_lifetime_with_tamping(tamping_frequency, data_df, high_or_l
         )
         annuity_values.append(annuity)
         lifetime_values.append(rail_lifetime)
-        lcc_values.append(annuity * rail_lifetime)
+        lcc_values.append(annuity * TECH_LIFE_YEARS)  # Total LCC in SEK/m
+
+    # set the size of the figure
+    fig_size = (12, 6)
+    plt.figure(figsize=fig_size)
 
     # Plot the results
     fig, ax1 = plt.subplots()
 
     # Plot annuity on the left y-axis
-    ax1.set_xlabel('Grinding Frequency (months)')
-    ax1.set_ylabel('Annuity (SEK/m/year) or LCC (SEK/m)', color='tab:blue')
-    ax1.plot(grinding_frequencies, annuity_values, color='tab:blue', label='Annuity')
+    ax1.set_xlabel('Grinding interval (months)')
+    ax1.set_ylabel('Costs', color='tab:blue')
+    ax1.plot(grinding_frequencies, annuity_values, color='tab:blue', label='Annuity (SEK/m/year)', marker='o')
     ax1.tick_params(axis='y', labelcolor='tab:blue')
 
     # Plot LCC values on the left y-axis as well, with a different style
-    ax1.plot(grinding_frequencies, lcc_values, color='tab:green', linestyle='--', marker='s', label='Total LCC')
+    ax1.plot(grinding_frequencies, lcc_values, color='tab:green', linestyle='--', marker='s', label='Total LCC (SEK/m)')
 
     # Create a second y-axis for Track Lifetime
     ax2 = ax1.twinx()
     ax2.set_ylabel('Rail Lifetime (years)', color='tab:orange')
-    ax2.plot(grinding_frequencies, lifetime_values, color='tab:orange', label='Rail Lifetime')
+    ax2.plot(grinding_frequencies, lifetime_values, color='tab:orange', label='Rail lifetime')
     ax2.tick_params(axis='y', labelcolor='tab:orange')
 
     # Add a title and grid
@@ -291,7 +298,7 @@ def plot_annuity_and_lifetime_with_tamping(tamping_frequency, data_df, high_or_l
     min_grinding_freq = grinding_frequencies[min_index]
     min_annuity = annuity_values[min_index]
     min_lifetime = lifetime_values[min_index]
-    print(f"Minimum annuity of {min_annuity:.2f} SEK/m/year is reached at a grinding frequency of {min_grinding_freq} months, with a rail lifetime of {min_lifetime:.2f} years.")
+    print(f"Optimal annuity of {min_annuity:.2f} SEK/m/year is reached at a grinding frequency of {min_grinding_freq} months, with a rail lifetime of {min_lifetime:.2f} years.")
 
 
 def plot_historical_data_single_rail(historical_data):
@@ -310,18 +317,22 @@ def plot_historical_data_single_rail(historical_data):
     # Plot H_curr
     plt.figure(figsize=fig_size)
     sns.lineplot(data=historical_df, x='Month', y='H_curr', marker='o')
+    plt.axhline(y=H_MAX, color='red', linestyle='--', label='H-index Max')
     plt.title('Historical H_curr Values')
     plt.xlabel('Month')
     plt.ylabel('H_curr')
+    plt.legend()
     plt.grid()
     plt.show()
 
     # Plot RCF_residual_curr
     plt.figure(figsize=fig_size)
     sns.lineplot(data=historical_df, x='Month', y='RCF_residual_curr', marker='o')
+    plt.axhline(y=RCF_MAX, color='red', linestyle='--', label='RCF Max')
     plt.title('Historical RCF_residual_curr Values')
     plt.xlabel('Month')
     plt.ylabel('RCF_residual_curr')
+    plt.legend()
     plt.grid()
     plt.show()
 
@@ -353,37 +364,52 @@ def plot_historical_data_both_rails(history_low, history_high):
     """
     df_low = pd.DataFrame(history_low)
     df_high = pd.DataFrame(history_high)
-    fig_size = (10, 4)
+    fig_size = (12, 3)
 
-    # Plot H_curr
-    plt.figure(figsize=fig_size)
-    sns.lineplot(data=df_high, x='Month', y='H_curr', marker='o', label='High Rail')
-    sns.lineplot(data=df_low, x='Month', y='H_curr', marker='o', label='Low Rail')
-    plt.title('Historical H_curr Values (High & Low Rail)')
-    plt.xlabel('Month')
-    plt.ylabel('H_curr')
-    plt.legend()
-    plt.grid()
-    plt.show()
+    # Set font size globally for all plots
+    plt.rcParams.update({'font.size': 14})
 
-    # Plot RCF_residual_curr
-    plt.figure(figsize=fig_size)
-    sns.lineplot(data=df_high, x='Month', y='RCF_residual_curr', marker='o', label='High Rail')
-    sns.lineplot(data=df_low, x='Month', y='RCF_residual_curr', marker='o', label='Low Rail')
-    plt.title('Historical RCF_residual_curr Values (High & Low Rail)')
-    plt.xlabel('Month')
-    plt.ylabel('RCF_residual_curr')
-    plt.legend()
-    plt.grid()
+    # Create a figure with two subplots (one above the other)
+    fig, axes = plt.subplots(2, 1, figsize=(fig_size[0], fig_size[1]*2), sharex=True)
+
+    # Plot H_curr on the first subplot
+    sns.lineplot(ax=axes[0], data=df_high, x='Month', y='H_curr', marker='o', label='High rail')
+    sns.lineplot(ax=axes[0], data=df_low, x='Month', y='H_curr', marker='o', label='Low rail')
+    axes[0].axhline(y=H_MAX, color='red', linestyle='--', label='H-index Max (14 mm)')
+    axes[0].set_title('H-index values over the lifetime of the high & low rail')
+    axes[0].set_ylabel('H-index (in mm)')
+    axes[0].grid()
+
+    # Plot RCF_residual_curr on the second subplot
+    sns.lineplot(ax=axes[1], data=df_high, x='Month', y='RCF_residual_curr', marker='o', label='High rail')
+    sns.lineplot(ax=axes[1], data=df_low, x='Month', y='RCF_residual_curr', marker='o', label='Low rail')
+    axes[1].axhline(y=RCF_MAX, color='red', linestyle='--', label='RCF Max (0.5 mm)')
+    axes[1].set_title('RCF value over the lifetime of the high & low rail')
+    axes[1].set_xlabel('Month')
+    axes[1].set_ylabel('RCF value (in mm)')
+    axes[1].grid()
+
+    # Combine legends from both subplots and show only once
+    handles, labels = [], []
+    for ax in axes:
+        h, l = ax.get_legend_handles_labels()
+        handles += h
+        labels += l
+        ax.legend_.remove() if ax.get_legend() else None
+    # Remove duplicates
+    by_label = OrderedDict(zip(labels, handles))
+    fig.legend(by_label.values(), by_label.keys(), loc='upper center', ncol=4, bbox_to_anchor=(0.5, 1.02), fontsize=13)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
     plt.show()
 
     # Plot Gauge_curr
     plt.figure(figsize=fig_size)
-    sns.lineplot(data=df_high, x='Month', y='Gauge_curr', marker='o', label='High Rail')
-    sns.lineplot(data=df_low, x='Month', y='Gauge_curr', marker='o', label='Low Rail')
-    plt.title('Historical Gauge_curr Values (High & Low Rail)')
+    sns.lineplot(data=df_high, x='Month', y='Gauge_curr', marker='o', label='High rail')
+    sns.lineplot(data=df_low, x='Month', y='Gauge_curr', marker='o', label='Low rail')
+    plt.title('Track gauge over the lifetime of the rails')
     plt.xlabel('Month')
-    plt.ylabel('Gauge_curr')
-    plt.legend()
+    plt.ylabel('Track gauge (in mm)')
+    plt.legend(fontsize=13)
     plt.grid()
     plt.show()
