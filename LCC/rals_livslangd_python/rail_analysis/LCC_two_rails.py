@@ -53,7 +53,7 @@ def calculate_grinding_costs(freq, since, gauge, H_curr, rcf_r, Ht, NW, RRes, RD
 
         grinding_cost = capacity_cost = 0
 
-    return grinding_cost, capacity_cost, H_curr, RCF_curr, rcf_r, since + 1
+    return grinding_cost, capacity_cost, H_curr, rcf_r, RCF_curr, since + 1
 
 
 def calculate_tamping_costs(since_tamp, gauge_freq, gauge, t):
@@ -156,6 +156,7 @@ def get_annuity_track_refactored(
     H_H = H_L = 0.0
     R_H = R_L = 0.0
     R_r_H = R_r_L = 0.0
+
     lifetime_H = lifetime_L = -1
     gauge = gauge_levels[0]
 
@@ -189,7 +190,7 @@ def get_annuity_track_refactored(
             RRes = RCF_RES_H if rail == 'H' else RCF_RES_L
             RDep = RCF_DEP_H if rail == 'H' else RCF_DEP_L
 
-            grinding_cost, capacity_cost, H_curr, RCF_curr, rcf_r, since = calculate_grinding_costs(
+            grinding_cost, capacity_cost, H_curr, rcf_r, RCF_curr, since = calculate_grinding_costs(
             freq, since, gauge, H_curr, rcf_r, Ht, NW, RRes, RDep, gauge_levels, t
             )
 
@@ -229,6 +230,8 @@ def get_annuity_track_refactored(
         for rail, since_attr in (('H', 'since_grind_H'), ('L', 'since_grind_L')):
             RCF_curr = R_H if rail == 'H' else R_L
             H_curr = H_H if rail == 'H' else H_L
+            rcf_r = R_r_H if rail == 'H' else R_r_L
+            
             since = locals()[since_attr]
 
             milling_cost, capacity_cost, H_curr, RCF_curr, rcf_r, since = handle_double_grinding(

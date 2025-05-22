@@ -95,12 +95,12 @@ def calculate_grinding_costs_rail(grinding_freq, since, gauge, H_curr, RCF_res_g
         cap_cost = POSS_GRINDING * CAP_POSS_PER_HOUR / (1 + DISCOUNT_RATE) ** y
         H_curr += PchipInterpolator(gauge_levels, H_table[H_table['Month'] == grinding_freq]['Value'])(gauge) - delta_H
         RCF_res_grinding += PchipInterpolator(gauge_levels, RCF_residual_table[RCF_residual_table['Month'] == grinding_freq]['Value'])(gauge)
-        RCF_residual_curr = RCF_res_grinding
+        RCF_curr = RCF_res_grinding
         since = 0
     else:
-        RCF_residual_curr = RCF_res_grinding + PchipInterpolator(gauge_levels, RCF_depth_table[RCF_depth_table['Month'] == since]['Value'])(gauge)
+        RCF_curr = RCF_res_grinding + PchipInterpolator(gauge_levels, RCF_depth_table[RCF_depth_table['Month'] == since]['Value'])(gauge)
         H_curr += delta_H
-    return grinding_cost, cap_cost, H_curr, RCF_res_grinding, RCF_residual_curr, since + 1
+    return grinding_cost, cap_cost, H_curr, RCF_res_grinding, RCF_curr, since + 1
 
 def calculate_tamping_costs_rail(tamping_freq, since, gauge, y):
     tamping_cost = 0
