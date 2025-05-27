@@ -5,14 +5,21 @@ EF_ELECTRICITY = 0.006464924
 EF_DIESEL = 0.063583815
 
 # Default values
-DEFAULT_SHARE_EL = 0.8  # 80% electricity
-DEFAULT_CIRCULARITY_COEF = 0.0  # 0% circularity
+DEFAULT_SHARE_EL = 0.4  # 40% electricity
+DEFAULT_CIRCULARITY_COEF = 0.2  # 0% circularity
 
-def get_LCA_renewal(asset_type, year, track_length=100, circularity_coef=DEFAULT_CIRCULARITY_COEF, share_electricity=DEFAULT_SHARE_EL):
+def get_LCA_renewal(
+      asset_type, 
+      year=2019, 
+      track_length=1000, 
+      circularity_coef=DEFAULT_CIRCULARITY_COEF, 
+      share_electricity=DEFAULT_SHARE_EL
+):
 
    # Read LCA-data och CO2e-valuation
    # absolute path
-   my_abs_path = r'C:\Users\EmmaFrom\Work Folders\Documents\GitHub\rurut\LCC\rurut\LCC\rals_livslangd_python\data\raw\LCA\\'
+   #my_abs_path = r'C:\Users\EmmaFrom\Work Folders\Documents\GitHub\rurut\LCC\rurut\LCC\rals_livslangd_python\data\raw\LCA\\'
+   my_abs_path = r'c:\Users\AbdouAA\Work Folders\Documents\GitHub\rurut\LCC\rals_livslangd_python\data\raw\LCA\\'
    lca = pd.read_csv(my_abs_path + 'lca_base_data.csv', delimiter=';', encoding='utf-8')
    co2e = pd.read_csv(my_abs_path + 'co2_valuation.csv', delimiter=';', encoding='utf-8')
    # read Energy use emissions file
