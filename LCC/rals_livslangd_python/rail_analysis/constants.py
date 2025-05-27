@@ -8,6 +8,11 @@ SELECTED_PROFILE = 'MB4'
 SELECTED_GAUGE_WIDENING = 1  
 SELECTED_RADIUS = '1465'
 
+
+# annual million gross tonnes (MGT) for the track
+ANNUAL_MGT = 35
+
+
 # discount rate for the annuity calculation
 DISCOUNT_RATE = 0.04
 

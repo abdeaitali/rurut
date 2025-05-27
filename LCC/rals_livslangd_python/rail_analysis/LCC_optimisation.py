@@ -3,7 +3,8 @@ from rail_analysis.LCC_single_rail import get_annuity_refactored, plot_historica
 from rail_analysis.constants import (
     TECH_LIFE_YEARS, 
     TRACK_RENEWAL_COST, 
-    TRACK_LENGTH_M
+    TRACK_LENGTH_M,
+    ANNUAL_MGT
 )
 
 import pandas as pd
@@ -126,14 +127,22 @@ def plot_comparison_grid(df):
     axs[1].plot(x, df['Lifetime_Joint'], label='Joint', marker='o')
     axs[1].plot(x, df['Lifetime_High'], label='Separate High', marker='x')
     axs[1].plot(x, df['Lifetime_Low'], label='Separate Low', marker='s')
-    axs[1].set_title('Lifetime [years]')
+    axs[1].set_title('Lifetime [years (left), MGT (right)]')
     axs[1].set_xlabel('Grinding Frequency (months)')
     axs[1].legend()
     axs[1].grid()
 
-    axs[2].plot(x, df['TotalLCC_Joint'], label='Joint', marker='o')
-    axs[2].plot(x, df['TotalLCC_Sum'], label='Separate (Sum H+L)', marker='s')
-    axs[2].set_title(f'Total LCC over {TECH_LIFE_YEARS} years [SEK/m]')
+    # Add secondary y-axis for MGT
+    ax2 = axs[1].twinx()
+    ax2.plot(x, df['Lifetime_Joint'] * ANNUAL_MGT, label='Joint (MGT)', marker='o', linestyle='--', color='tab:blue', alpha=0.5)
+    ax2.plot(x, df['Lifetime_High'] * ANNUAL_MGT, label='Separate High (MGT)', marker='x', linestyle='--', color='tab:orange', alpha=0.5)
+    ax2.plot(x, df['Lifetime_Low'] * ANNUAL_MGT, label='Separate Low (MGT)', marker='s', linestyle='--', color='tab:green', alpha=0.5)
+    #ax2.set_ylabel('Lifetime [MGT]')
+    ax2.grid(False)
+
+    axs[2].plot(x, df['TotalLCC_Joint'] / 1000, label='Joint', marker='o')
+    axs[2].plot(x, df['TotalLCC_Sum'] / 1000, label='Separate (Sum H+L)', marker='s')
+    axs[2].set_title(f'Total LCC over {TECH_LIFE_YEARS} years [kSEK/m]')
     axs[2].set_xlabel('Grinding Frequency (months)')
     axs[2].legend()
     axs[2].grid()

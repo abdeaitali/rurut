@@ -381,7 +381,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from collections import OrderedDict
-from rail_analysis.constants import H_MAX, RCF_MAX
+from rail_analysis.constants import H_MAX, RCF_MAX, ANNUAL_MGT
 
 def plot_historical_data_two_rails(history):
     """
@@ -413,7 +413,12 @@ def plot_historical_data_two_rails(history):
     sns.lineplot(data=df, x='Month', y='RCF_L', marker='o', label='Low rail', ax=axes[1])
     axes[1].axhline(RCF_MAX, color='red', linestyle='--', label='RCF_MAX (0.5 mm)')
     axes[1].set_title('RCF value over the lifetime of the high & low rail', fontsize=font_size+2)
-    axes[1].set_xlabel('Month', fontsize=font_size)
+    axes[1].set_xlabel('Month (MGT)', fontsize=font_size)
+    # Set custom x-tick labels to show both Month and MGT
+    xticks = axes[1].get_xticks()
+    xticklabels = [f"{int(month)} ({month/12*ANNUAL_MGT:.1f})" for month in xticks]
+    axes[1].set_xticks(xticks)
+    axes[1].set_xticklabels(xticklabels, fontsize=font_size)
     axes[1].set_ylabel('RCF (mm)', fontsize=font_size)
     axes[1].grid(True)
     axes[1].tick_params(axis='both', labelsize=font_size)
@@ -436,7 +441,12 @@ def plot_historical_data_two_rails(history):
     plt.figure(figsize=fig_size)
     sns.lineplot(data=df, x='Month', y='Gauge', marker='o', label='Gauge')
     plt.title('Historical Track Gauge', fontsize=font_size+2)
-    plt.xlabel('Month', fontsize=font_size)
+    plt.xlabel('Month (MGT)', fontsize=font_size)
+    # Set custom x-tick labels to show both Month and MGT
+    xticks = plt.gca().get_xticks()
+    xticklabels = [f"{int(month)} ({month/12*ANNUAL_MGT:.1f})" for month in xticks]
+    plt.gca().set_xticks(xticks)
+    plt.gca().set_xticklabels(xticklabels, fontsize=font_size)
     plt.ylabel('Gauge (mm)', fontsize=font_size)
     plt.legend(fontsize=font_size)
     plt.grid(True)

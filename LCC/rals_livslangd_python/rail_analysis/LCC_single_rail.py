@@ -81,7 +81,7 @@ from rail_analysis.constants import (
     SELECTED_RADIUS,
     SELECTED_PROFILE,
     RCF_MAX,
-    TRACK_RENEWAL_COST
+    ANNUAL_MGT
 )
 
 # === HELPER FUNCTIONS ===
@@ -376,7 +376,7 @@ def plot_historical_data_both_rails(history_low, history_high):
     sns.lineplot(ax=axes[0], data=df_high, x='Month', y='H_curr', marker='o', label='High rail')
     sns.lineplot(ax=axes[0], data=df_low, x='Month', y='H_curr', marker='o', label='Low rail')
     axes[0].axhline(y=H_MAX, color='red', linestyle='--', label='H-index Max (14 mm)')
-    axes[0].set_title('H-index values over the lifetime of the high & low rail')
+    #axes[0].set_title('H-index values over the lifetime of the high & low rail')
     axes[0].set_ylabel('H-index (in mm)')
     axes[0].grid()
 
@@ -384,8 +384,13 @@ def plot_historical_data_both_rails(history_low, history_high):
     sns.lineplot(ax=axes[1], data=df_high, x='Month', y='RCF_residual_curr', marker='o', label='High rail')
     sns.lineplot(ax=axes[1], data=df_low, x='Month', y='RCF_residual_curr', marker='o', label='Low rail')
     axes[1].axhline(y=RCF_MAX, color='red', linestyle='--', label='RCF Max (0.5 mm)')
-    axes[1].set_title('RCF value over the lifetime of the high & low rail')
+    #axes[1].set_title('RCF value over the lifetime of the high & low rail')
     axes[1].set_xlabel('Month')
+    # Add a secondary x-axis showing cumulative MGT
+    def months_to_mgt(months):
+        return months * ANNUAL_MGT / 12
+    secax = axes[1].secondary_xaxis('top', functions=(months_to_mgt, lambda mgt: mgt * 12 / ANNUAL_MGT))
+    secax.set_xlabel('Traffic load (in million gross tonnes)')
     axes[1].set_ylabel('RCF value (in mm)')
     axes[1].grid()
 
