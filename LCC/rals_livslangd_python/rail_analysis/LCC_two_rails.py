@@ -78,7 +78,7 @@ def handle_double_grinding(since_attr, gauge, H_curr, RCF_curr, rcf_r, gauge_lev
     if RCF_curr >= RCF_MAX:
         # Add milling costs (less than double grinding costs)
         milling_cost = (5 / 3 * GRINDING_COST_PER_M * TRACK_LENGTH_M) / (1 + DISCOUNT_RATE) ** t
-        capacity_cost = (5 / 3 * POSS_GRINDING * CAP_POSS_PER_HOUR) / (1 + DISCOUNT_RATE) ** t
+        capacity_cost = (POSS_GRINDING_TWICE * CAP_POSS_PER_HOUR) / (1 + DISCOUNT_RATE) ** t
 
         # Update H-index using H-index table (twice)
         ΔH1 = PchipInterpolator(gauge_levels, Ht_H[Ht_H['Month'] == since_attr + 1]['Value'])(gauge)
@@ -252,14 +252,34 @@ def get_annuity_track_refactored(
         # Rail renewal (costs separated)
         for H_curr, RCF_curr, name in ((H_H, R_H, 'H'), (H_L, R_L, 'L')):
             if H_curr > H_MAX:
-                # Option 1: Renew both rails at the same time
                 material_cost = RAIL_RENEWAL_COST / (1 + DISCOUNT_RATE) ** t
                 cap_renewal_cost = (CAP_POSS_PER_HOUR * POSS_NEW_RAIL) / (1 + DISCOUNT_RATE) ** t
+
                 lcc_H = PV_renew_H + PV_maint_H + PV_cap_H + material_cost
                 lcc_L = PV_renew_L + PV_maint_L + PV_cap_L + material_cost 
-                lcc_shared =  PV_tamping + PV_cap_tamping + cap_renewal_cost
+                lcc_shared = PV_tamping + PV_cap_tamping + cap_renewal_cost
+
                 lifetime_H = t if name == 'H' else lifetime_H
                 lifetime_L = t if name == 'L' else lifetime_L
+
+                # Breakdown by category:
+                renewal_direct   = PV_renew_H + PV_renew_L + 2*material_cost
+                renewal_capacity = cap_renewal_cost
+
+                grinding_direct   = PV_maint_H + PV_maint_L
+                grinding_capacity = PV_cap_H + PV_cap_L
+
+                tamping_direct    = PV_tamping
+                tamping_capacity  = PV_cap_tamping
+
+                # Build a nested breakdown dictionary
+                breakdown = {
+                    "Renewal": {"Direct": renewal_direct, "Capacity": renewal_capacity},
+                    "Grinding": {"Direct": grinding_direct, "Capacity": grinding_capacity},
+                    "Tamping":  {"Direct": tamping_direct,  "Capacity": tamping_capacity}
+                }
+
+                # Append the option including the nested breakdown
                 renewal_options.append({
                     "Option": "Renew both @" + name,
                     "Rail": name,
@@ -268,12 +288,18 @@ def get_annuity_track_refactored(
                     "Horizon": t,
                     "LCC_H": lcc_H,
                     "LCC_L": lcc_L,
-                    "LCC_shared": lcc_shared
+                    "LCC_shared": lcc_shared,
+                    "Breakdown": breakdown
                 })
 
-
-                # if both rails have been renewed, we add save the final case in renewal options where rails are separately renewed
+                # Also append a separate option for separate renewals if both rails have been renewed
                 if lifetime_L > 0 and lifetime_H > 0:
+                    breakdown = {
+                        "Renewal": {"Direct": renewal_direct, "Capacity": 2*renewal_capacity},
+                        "Grinding": {"Direct": grinding_direct, "Capacity": grinding_capacity},
+                        "Tamping":  {"Direct": tamping_direct,  "Capacity": tamping_capacity}
+                    }
+                    # Append the option for renewing separately    
                     renewal_options.append({
                         "Option": "Renew separately",
                         "Rail": name,
@@ -282,7 +308,8 @@ def get_annuity_track_refactored(
                         "Horizon": t,
                         "LCC_H": lcc_H + cap_renewal_cost,
                         "LCC_L": lcc_L + cap_renewal_cost,
-                        "LCC_shared": lcc_shared - cap_renewal_cost
+                        "LCC_shared": lcc_shared - cap_renewal_cost,
+                        "Breakdown": breakdown
                     })
                     break
 
@@ -310,6 +337,23 @@ def get_annuity_track_refactored(
         if m == MAX_MONTHS:
             material_cost = RAIL_RENEWAL_COST / (1 + DISCOUNT_RATE) ** t
             cap_renewal_cost = (CAP_POSS_PER_HOUR * POSS_NEW_RAIL) / (1 + DISCOUNT_RATE) ** t
+
+            # Breakdown by category:
+            renewal_direct   = PV_renew_H + PV_renew_L + 2*material_cost
+            renewal_capacity = cap_renewal_cost
+
+            grinding_direct   = PV_maint_H + PV_maint_L
+            grinding_capacity = PV_cap_H + PV_cap_L
+
+            tamping_direct    = PV_tamping
+            tamping_capacity  = PV_cap_tamping
+
+            breakdown = {
+                "Renewal": {"Direct": renewal_direct, "Capacity": renewal_capacity},
+                "Grinding": {"Direct": grinding_direct, "Capacity": grinding_capacity},
+                "Tamping":  {"Direct": tamping_direct,  "Capacity": tamping_capacity}
+            }
+
             renewal_options.append({
                 "Option": "Renew - EoL track",
                 "Rail": "Both",
@@ -318,7 +362,8 @@ def get_annuity_track_refactored(
                 "Horizon": t,
                 "LCC_H": PV_maint_H + PV_cap_H + material_cost,
                 "LCC_L": PV_maint_L + PV_cap_L + material_cost,
-                "LCC_shared": PV_tamping + PV_cap_tamping + cap_renewal_cost
+                "LCC_shared": PV_tamping + PV_cap_tamping + cap_renewal_cost,
+                "Breakdown": breakdown
             })
             break
 
@@ -336,12 +381,11 @@ def get_annuity_track_refactored(
 
 
     optimal_option = min(renewal_options, key=lambda x: x["Annuity"])
-
     annuity = optimal_option["Annuity"]
     lifetime = optimal_option["Horizon"]
 
     if verbose:
-        print(f"Optimal option: {optimal_option['Option']} with annuity {annuity:.2f} SEK/m/year and lifetime {lifetime:.2f} years")
+        print_optimal_option_breakdown(optimal_option, annuity, lifetime)
 
     if plot_timeline:
         plot_renewal_options(renewal_options)
@@ -382,6 +426,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from collections import OrderedDict
 from rail_analysis.constants import H_MAX, RCF_MAX, ANNUAL_MGT
+import numpy as np
 
 def plot_historical_data_two_rails(history):
     """
@@ -452,3 +497,93 @@ def plot_historical_data_two_rails(history):
     plt.grid(True)
     plt.tight_layout()
     plt.show()
+
+
+def print_optimal_option_breakdown(optimal_option, annuity, lifetime):
+    """
+    Prints the breakdown of the annuity costs for the optimal option.
+    Converts accumulated costs to annuity (per year) values before displaying.
+    
+    Parameters:
+      - optimal_option: Dictionary containing the breakdown of accumulated costs
+      - annuity: The calculated total annuity (SEK/m/year)
+      - lifetime: The total lifetime in years (Horizon)
+    """
+    print(f"Optimal option: {optimal_option['Option']} with annuity {annuity:.2f} SEK/m/year and lifetime {lifetime:.2f} years")
+    
+    breakdown = optimal_option.get("Breakdown", None)
+    if breakdown is not None:
+        # Convert accumulated costs to annuity (per year) values
+        horizon = optimal_option["Horizon"]  # in years
+        
+        # Calculate annuity for each component
+        renewal_ann = {
+            "Direct": breakdown["Renewal"]["Direct"] / (horizon * TRACK_LENGTH_M),
+            "Capacity": breakdown["Renewal"]["Capacity"] / (horizon * TRACK_LENGTH_M)
+        }
+        grinding_ann = {
+            "Direct": breakdown["Grinding"]["Direct"] / (horizon * TRACK_LENGTH_M),
+            "Capacity": breakdown["Grinding"]["Capacity"] / (horizon * TRACK_LENGTH_M)
+        }
+        tamping_ann = {
+            "Direct": breakdown["Tamping"]["Direct"] / (horizon * TRACK_LENGTH_M),
+            "Capacity": breakdown["Tamping"]["Capacity"] / (horizon * TRACK_LENGTH_M)
+        }
+
+        # Calculate totals (as annuities)
+        renewal_total = renewal_ann["Direct"] + renewal_ann["Capacity"]
+        grinding_total = grinding_ann["Direct"] + grinding_ann["Capacity"]
+        tamping_total = tamping_ann["Direct"] + tamping_ann["Capacity"]
+        overall_total = renewal_total + grinding_total + tamping_total
+
+        # Print breakdown by category
+        print("\nAnnuity Breakdown by Category (SEK/m/year and %):")
+        print(f"  Renewal:   {renewal_total:.2f} SEK/m/year", end=" ")
+        print(f"(Direct: {renewal_ann['Direct']:.2f}, Capacity: {renewal_ann['Capacity']:.2f})  "
+              f"({renewal_total/overall_total*100:.1f}%)")
+        
+        print(f"  Grinding:  {grinding_total:.2f} SEK/m/year", end=" ")
+        print(f"(Direct: {grinding_ann['Direct']:.2f}, Capacity: {grinding_ann['Capacity']:.2f})  "
+              f"({grinding_total/overall_total*100:.1f}%)")
+        
+        print(f"  Tamping:   {tamping_total:.2f} SEK/m/year", end=" ")
+        print(f"(Direct: {tamping_ann['Direct']:.2f}, Capacity: {tamping_ann['Capacity']:.2f})  "
+              f"({tamping_total/overall_total*100:.1f}%)")
+        
+        print(f"  Total:     {overall_total:.2f} SEK/m/year")
+
+        # Plot heatmap of annuity breakdown
+        categories = ["Renewal", "Grinding", "Tamping"]
+        types = ["Direct", "Capacity"]
+        data = np.array([
+            [renewal_ann["Direct"], renewal_ann["Capacity"]],
+            [grinding_ann["Direct"], grinding_ann["Capacity"]],
+            [tamping_ann["Direct"], tamping_ann["Capacity"]]
+        ])
+        
+        percent_data = data / overall_total * 100
+
+        # Create annotations with both absolute and percentage values
+        annot = np.empty_like(data, dtype=object)
+        for i in range(data.shape[0]):
+            for j in range(data.shape[1]):
+                annot[i, j] = f"{data[i, j]:.1f}\n({percent_data[i, j]:.1f}%)"
+
+        plt.figure(figsize=(8, 4))
+        ax = sns.heatmap(
+            data,
+            annot=annot,
+            fmt='',
+            cmap="YlGnBu",
+            xticklabels=types,
+            yticklabels=categories,
+            cbar_kws={'label': 'SEK/m/year'}
+        )
+        plt.title("Annuity Breakdown\n(SEK/m/year and % of total)")
+        plt.xlabel("Cost Type")
+        plt.ylabel("Category")
+        plt.yticks(rotation=0)  # Make y-axis (category) labels horizontal
+        plt.tight_layout()
+        plt.show()
+    else:
+        print("No breakdown data available.")

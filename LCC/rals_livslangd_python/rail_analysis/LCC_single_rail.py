@@ -367,7 +367,7 @@ def plot_historical_data_both_rails(history_low, history_high):
     fig_size = (12, 3)
 
     # Set font size globally for all plots
-    plt.rcParams.update({'font.size': 14})
+    plt.rcParams.update({'font.size': 16})
 
     # Create a figure with two subplots (one above the other)
     fig, axes = plt.subplots(2, 1, figsize=(fig_size[0], fig_size[1]*2), sharex=True)
