@@ -40,6 +40,10 @@ def get_LCA_renewal(
    energy_use = row['Energy use_MJ_m']       # MJ/m
 
    # get co2e valuation for year 
+   year = int(year)  # Ensure year is an integer
+   # if year is equal or above 2019, use it. Otherwise, replace with year = year + 2019
+   if year < 100: # if number of years new, convert to a year 
+      year = year + 2019
    co2_price = co2e[co2e['Year'] == year]['CO2_Valuation (kr/kg Co2e)'].values[0]
 
    #convert energy use to co2e - emissions 

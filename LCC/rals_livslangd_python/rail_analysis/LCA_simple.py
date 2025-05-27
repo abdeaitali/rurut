@@ -13,7 +13,7 @@ def get_LCA_renewal_simple(
     year=2019,
     circularity_coef=DEFAULT_CIRCULARITY_COEF,
     share_electricity=DEFAULT_SHARE_EL,
-    track_length_m=1000,
+    track_length=1000,
     return_per_meter=False
 ):
    """
@@ -24,7 +24,7 @@ def get_LCA_renewal_simple(
       year (int): Year for CO2 valuation
       circularity_coef (float): Fraction of circularity (0-1)
       share_electricity (float): Fraction of electricity use (0-1)
-      length (float): Length in meters (default TRACK_LENGTH_M)
+      length (float): Length in meters (default TRACK_LENGTH)
       return_per_meter (bool): If True, return cost per meter, else total cost
 
    Returns:
@@ -70,4 +70,4 @@ def get_LCA_renewal_simple(
    if return_per_meter:
       return cost_per_meter
    else:
-      return cost_per_meter * track_length_m
+      return cost_per_meter * track_length
